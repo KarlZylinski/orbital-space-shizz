@@ -49,12 +49,15 @@ function simulate(state, t, dt)
         shader: "default"
     }
 
+    var r = quat.rotateZ(quat.create(), quat.create(), 0.7);
+    var r2 = quat.rotateY(r, r, t)
+
     var testSphere = {
         type: "sphere",
         size: 2.0,
         position: [0, 0, -5.0],
         color: [1, 0.7, 0],
-        rotation: quat.rotateY(quat.create(), quat.create(), t),
+        rotation: r2,
         shader: "default"
     }
 
@@ -245,6 +248,7 @@ function draw(state, geometry)
         gl.vertexAttribPointer(shader.normalAttribute, 3, gl.FLOAT, false, GEOMETRY_SIZE * 4, 3 * 4)
         gl.enableVertexAttribArray(shader.colorAttribute)
         gl.vertexAttribPointer(shader.colorAttribute, 3, gl.FLOAT, false, GEOMETRY_SIZE * 4, 6 * 4)
+        gl.uniform3fv(shader.sunPositionUniform, SUN_POS)
         gl.uniformMatrix4fv(shader.projectionUniform, false, projection)
         gl.uniformMatrix4fv(shader.modelViewUniform, false, model)
         gl.drawArrays(gl.TRIANGLES, 0, vertices.length / GEOMETRY_SIZE)
@@ -318,6 +322,7 @@ function loadShaderProgram(gl, vertexShaderName, fragmentShaderName) {
     shaderProgram.positionAttribute = gl.getAttribLocation(shaderProgram, "position")
     shaderProgram.normalAttribute = gl.getAttribLocation(shaderProgram, "normal")
     shaderProgram.colorAttribute = gl.getAttribLocation(shaderProgram, "color")
+    shaderProgram.sunPositionUniform = gl.getUniformLocation(shaderProgram, "sunPosition")
     shaderProgram.projectionUniform = gl.getUniformLocation(shaderProgram, "projection")
     shaderProgram.modelViewUniform = gl.getUniformLocation(shaderProgram, "modelView")
     return shaderProgram
