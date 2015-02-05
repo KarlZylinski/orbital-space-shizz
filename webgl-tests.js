@@ -1,5 +1,5 @@
 var GEOMETRY_SIZE = 9
-var SUN_POS = [149600000, 0, 0]
+var SUN_POS = [-70, 0, 100]
 
 window.onload = function()
 {
@@ -40,28 +40,33 @@ function simulate(state, t, dt)
 {
     var objects = []
 
+    var tr = quat.create()
+    quat.rotateX(tr, tr, 3.0)
+    quat.rotateZ(tr, tr, t*3)
+
     var testTriangle = {
         type: "triangle",
         size: 0.5,
-        position: [Math.cos(t), Math.sin(t), -5.0],
+        position: [-2, 0, -3.0],
         color: [1, 0.7, 0],
-        rotation: quat.rotateZ(quat.create(), quat.create(), t*3),
+        rotation: tr,
         shader: "default"
     }
 
-    var r = quat.rotateZ(quat.create(), quat.create(), 0.7);
-    var r2 = quat.rotateY(r, r, t)
+    var r = quat.create()
+    quat.rotateZ(r, r, 0.7);
+    quat.rotateY(r, r, t)
 
     var testSphere = {
         type: "sphere",
         size: 2.0,
         position: [0, 0, -5.0],
         color: [1, 0.7, 0],
-        rotation: r2,
+        rotation: r,
         shader: "default"
     }
 
-    //objects.push(testTriangle)
+    objects.push(testTriangle)
     objects.push(testSphere)
     return objects
 }
@@ -142,9 +147,9 @@ function createGeometry(objects)
                             [-s/2, 0, 0]
                         ],
                     normals: [
-                            [0, 0, 1],
-                            [0, 0, 1],
-                            [0, 0, 1]
+                            [0, 0, -1],
+                            [0, 0, -1],
+                            [0, 0, -1]
                         ]
                     }
 

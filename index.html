@@ -29,7 +29,8 @@
 
             void main(void) {
                 vec3 nSunPos = normalize(sunPosition);
-                float light = dot(nSunPos, vNormal);
+                vec3 nNormal = normalize(vNormal);
+                float light = dot(nSunPos, nNormal);
                 float ambient = 0.05;
                 gl_FragColor = max(vec4(ambient, ambient, ambient, 1.0), vec4(vColor * light, 1.0));
             }
