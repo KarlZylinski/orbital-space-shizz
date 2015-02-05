@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script id="shader-vs" type="x-shader/x-vertex">
+            attribute vec3 position;
+            uniform mat4 modelView;
+            uniform mat4 projection;
+
+            void main(void) {
+                gl_Position = projection * modelView * vec4(position, 1.0);
+            }
+        </script>
+        <script id="shader-fs" type="x-shader/x-fragment">
+            precision mediump float;
+
+            void main(void) {
+                gl_FragColor = vec4(0, 1.0, 0, 1.0);
+            }
+        </script>
+        <script type="text/javascript" src="webgl-debug.js"></script>
+        <script type="text/javascript" src="gl-matrix.js"></script>
+        <script type="text/javascript" src="webgl-tests.js"></script>
+        <title>webgltest</title>
+    </head>
+    <body>
+        
+    </div>
+</body>
+</html>
