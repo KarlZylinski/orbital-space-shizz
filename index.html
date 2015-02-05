@@ -1,20 +1,34 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <script id="shader-vs" type="x-shader/x-vertex">
+        <!-- DEFAULT SHADER -->
+        <script id="default-vs" type="x-shader/x-vertex">
             attribute vec3 position;
+            attribute vec3 normal;
+            attribute vec3 color;
             uniform mat4 modelView;
             uniform mat4 projection;
+            varying vec3 vPosition;
+            varying vec3 vNormal;
+            varying vec3 vColor;
 
             void main(void) {
+                vColor = color;
+                vNormal = normal;
+                vPosition = position;
                 gl_Position = projection * modelView * vec4(position, 1.0);
             }
         </script>
-        <script id="shader-fs" type="x-shader/x-fragment">
+
+        <script id="default-fs" type="x-shader/x-fragment">
             precision mediump float;
+            varying vec3 vPosition;
+            varying vec3 vNormal;
+            varying vec3 vColor;
+            uniform vec3 sunPosition;
 
             void main(void) {
-                gl_FragColor = vec4(0, 1.0, 0, 1.0);
+                gl_FragColor = vec4(vNormal * vColor, 1.0);
             }
         </script>
         <script type="text/javascript" src="webgl-debug.js"></script>
@@ -22,7 +36,7 @@
         <script type="text/javascript" src="webgl-tests.js"></script>
         <title>webgltest</title>
     </head>
-    <body>
+    <body style="margin: 0; padding: 0; overflow: hidden">
         
     </div>
 </body>
