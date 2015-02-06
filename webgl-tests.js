@@ -6,16 +6,22 @@ window.onload = function()
     var simulationState = simulation.setup()
     var rendererState = renderer.setup()
     var startTime = new Date()
-    var timeLastFrame = startTime
+    var timeLastFrame = null
 
     var interval = setInterval(function() {
         var currentTime = new Date()
-        var dt = (currentTime - timeLastFrame) / 1000.0
+
+        var dt = timeLastFrame == null 
+            ? 1
+            : (currentTime - timeLastFrame)
+
         var timeSinceStart = (currentTime - startTime) / 1000.0
         var timeLastFrame = currentTime
 
-        if (dt === 0.0)
-            dt = 0.001
+        if (dt === 0)
+            dt = 1
+
+        dt = dt / 1000.0
 
         try
         {
@@ -45,23 +51,51 @@ var simulation = {
         state.camera = {
             eye: vec3.create(),
             target: vec3.create(),
-            up: vec3.create(),
+            up: vec3.create()
         }
 
-        var planet = simulation.spawn(state, "sphere", 6371, function(obj, dt, t) {
-            var r = quat.create()
-            quat.rotateY(r, r, t)
-            obj.rotation = r
+        var planetSize = 6371
+        var planet = entity.spawn(state, "sphere", planetSize, function(obj, dt, t) {
+            entity.rotateY(obj, t*100)
         })
 
+        function getCoords(latNumber, longNumber)
+        {
+            var latitudeBands = longitudeBands = Math.min(100, 10 + planetSize)
+            var theta = latNumber * Math.PI / latitudeBands
+            var sinTheta = Math.sin(theta)
+            var cosTheta = Math.cos(theta)
+
+            var phi = longNumber * 2 * Math.PI / longitudeBands
+            var sinPhi = Math.sin(phi)
+            var cosPhi = Math.cos(phi)
+
+            var x = cosPhi * sinTheta
+            var y = cosTheta
+            var z = sinPhi * sinTheta
+
+            return [x, y, z]
+        }
+
+        var rocketSize = 0.08
+        state.player = entity.spawn(state, "rocket", rocketSize, function(obj, dt, t) {
+        })
+        entity.setParent(state.player, planet)
+
+        var planetNormPos = getCoords(3, 5)
+        var offset = vec3.add(vec3.create(),
+            vec3.scale(vec3.create(), planetNormPos, planetSize),
+            vec3.scale(vec3.create(), planetNormPos, rocketSize))
+        entity.translate(state.player, offset)
         return state
     },
 
     simulate: function(state, t, dt)
     {
+        var p = [state.player.model[12], state.player.model[13], state.player.model[14]]
         var camera = state.camera
-        camera.eye = [Math.cos(t) * 15000, 0, Math.sin(t) * 15000]
-        camera.target = [0, 0, 0]
+        camera.eye = vec3.add(camera.eye, p, [0, 0, -0.5])
+        camera.target = p
         camera.up = [0, 1, 0]
         state.camera = camera
 
@@ -71,23 +105,67 @@ var simulation = {
             if (obj.update)
                 obj.update(obj, dt, t)
         }
-    },
+    }
+}
 
-    spawn: function(state, type, size, update)
+var entity = {
+    spawn: function(simulationState, type, size, update)
     {
-        var obj = {
+        var e = {
             type: type,
             size: size,
+            children: [],
             position: vec3.create(),
-            color: [1, 1, 1],
             rotation: quat.create(),
+            model: mat4.create(),
+            color: [1, 1, 1],
             shader: "default",
             update: update
         }
 
-        state.world.push(obj)
-        state.addedObjects.push(obj)
-        return obj
+        simulationState.world.push(e)
+        simulationState.addedObjects.push(e)
+        return e
+    },
+
+    calculateModel: function(e)
+    {
+        function calculate(e)
+        {
+            var model = mat4.fromRotationTranslation(mat4.create(), e.rotation, e.position)
+        
+            if (e.parent)
+            {
+                var parentTransform = calculate(e.parent)
+                return mat4.multiply(mat4.create(), parentTransform, model)
+            }
+
+            return model
+        }
+
+        e.model = calculate(e)
+
+        for (var i = 0; i < e.children.length; ++i) {
+            entity.calculateModel(e.children[i])
+        }
+    },
+
+    translate: function(e, vec)
+    {
+        vec3.add(e.position, e.position, vec)
+        entity.calculateModel(e)
+    },
+
+    rotateY: function(e, rads)
+    {
+        quat.rotateY(e.rotation, e.rotation, rads)
+        entity.calculateModel(e)
+    },
+
+    setParent: function(e, parent)
+    {
+        parent.children.push(e)
+        e.parent = parent
     }
 }
 
@@ -177,6 +255,20 @@ var renderer = {
                 case "sphere":
                     return createSphere(s)
 
+                case "rocket":
+                    return {
+                        vertices: [
+                            [0, s/2, 0,],
+                            [s/2, 0, 0],
+                            [-s/2, 0, 0]
+                        ],
+                    normals: [
+                            [0, 0, -1],
+                            [0, 0, -1],
+                            [0, 0, -1]
+                        ]
+                    }
+
                 default: console.error("Unknown object type.")
                     break
             }
@@ -259,8 +351,7 @@ var renderer = {
 
         function drawObject(object)
         {
-            var model = mat4.create()
-            mat4.fromRotationTranslation(model, object.rotation, object.position)
+            var model = object.model
             var modelInverseTranspose = mat4.clone(model)
             mat4.invert(modelInverseTranspose, modelInverseTranspose)
             var view = mat4.create()
