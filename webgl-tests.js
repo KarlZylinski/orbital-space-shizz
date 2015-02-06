@@ -1,16 +1,10 @@
 var GEOMETRY_SIZE = 9
 var SUN_POS = [-70, 0, 100]
-var NUM_RENDER_OBJECTS = 4000
 
 window.onload = function()
 {
-    var freeRenderHandles = []
-
-    for (var i = 0; i < NUM_RENDER_OBJECTS; ++i)
-        freeRenderHandles[i] = i
-
-    var simulationState = setupSimulation(freeRenderHandles)
-    var rendererState = setupRenderer(freeRenderHandles)
+    var simulationState = setupSimulation()
+    var rendererState = setupRenderer()
     var startTime = new Date()
     var timeLastFrame = startTime
 
@@ -25,7 +19,7 @@ window.onload = function()
 
         try
         {
-            simulate(simulationState, freeRenderHandles, timeSinceStart, dt)
+            simulate(simulationState, timeSinceStart, dt)
             createAddedObjects(rendererState, simulationState.addedObjects)
             destroyRemovedObjects(rendererState, simulationState.removedObjects)
             simulationState.addedObjects = []
@@ -40,14 +34,13 @@ window.onload = function()
     }, 1000/30)
 }
 
-function spawn(state, type, size, update)
+function spawn(state, type, size, position, color, update)
 {
     var obj = {
         type: type,
         size: size,
-        renderHandle: state.freeRenderHandles.pop(),
-        position: vec3.create(),
-        color: vec3.create(),
+        position: [0, 0, -15000],
+        color: [1, 1, 1],
         rotation: quat.create(),
         shader: "default",
         update: update
@@ -58,14 +51,19 @@ function spawn(state, type, size, update)
     return obj
 }
 
-function setupSimulation(freeRendererHandles)
+function setupSimulation()
 {
     var state = {}
-    state.freeRenderHandles = freeRendererHandles
     state.world = []
     state.addedObjects = []
     state.removedObjects = []
-    spawn(state, "sphere", 2.0)
+
+    spawn(state, "sphere", 6371, function(obj, dt, t) {
+        var r = quat.create()
+        quat.rotateY(r, r, t)
+        obj.rotation = r
+    })
+
     return state
 }
 
@@ -83,23 +81,23 @@ function createSphere(radius)
 {
     var vertices = []
     var normals = []
-    var latitudeBands = longitudeBands = 10
+    var latitudeBands = longitudeBands = Math.min(100, 10 + radius)
 
     function getCoords(latNumber, longNumber)
     {
-        var theta = latNumber * Math.PI / latitudeBands;
-        var sinTheta = Math.sin(theta);
-        var cosTheta = Math.cos(theta);
+        var theta = latNumber * Math.PI / latitudeBands
+        var sinTheta = Math.sin(theta)
+        var cosTheta = Math.cos(theta)
 
-        var phi = longNumber * 2 * Math.PI / longitudeBands;
-        var sinPhi = Math.sin(phi);
-        var cosPhi = Math.cos(phi);
+        var phi = longNumber * 2 * Math.PI / longitudeBands
+        var sinPhi = Math.sin(phi)
+        var cosPhi = Math.cos(phi)
 
-        var x = cosPhi * sinTheta;
-        var y = cosTheta;
-        var z = sinPhi * sinTheta;
+        var x = cosPhi * sinTheta
+        var y = cosTheta
+        var z = sinPhi * sinTheta
 
-        return { x: x, y: y, z: z };
+        return { x: x, y: y, z: z }
     }
 
     function createSphereVertex(latNumber, longNumber)
@@ -201,7 +199,7 @@ function createGeometry(state, object)
     }
 }
 
-function setupRenderer(freeRenderHandles)
+function setupRenderer()
 {
     var state = {}
     var canvas = document.createElement("canvas")
@@ -217,12 +215,6 @@ function setupRenderer(freeRenderHandles)
     var ext = initWebGLEW(gl)
     state.shaders = {}
     state.shaders.default = loadShaderProgram(gl, "default-vs", "default-fs")
-    state.objects = []
-    state.freeRenderHandles = freeRenderHandles
-
-    for (var i = 0; i < NUM_RENDER_OBJECTS; ++i)
-        state.objects[i] = -1
-
     gl.clearColor(0.0, 0.0, 0.0, 1.0)
     gl.enable(gl.DEPTH_TEST)
     return state
@@ -238,9 +230,13 @@ function createAddedObjects(state, addedObjects)
     }
 }
 
-function destroyRemovedObjects(state, removeObjects)
+function destroyRemovedObjects(state, removedObjects)
 {
-
+    for (var i = 0; i < removedObjects.length; ++i)
+    {
+        var obj = removedObjects[i]
+        gl.deleteBuffer(obj.geometryHandle)
+    }
 }
 
 function draw(state)
@@ -249,7 +245,7 @@ function draw(state)
     gl.viewport(0, 0, state.resolutionX, state.resolutionY)
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
     var projection = mat4.create()
-    mat4.perspective(projection, 45, state.resolutionX / state.resolutionY, 0.1, 100.0)
+    mat4.perspective(projection, 45, state.resolutionX / state.resolutionY, 0.1, 20000.0)
 
     function drawObject(object)
     {
@@ -258,7 +254,7 @@ function draw(state)
         var view = mat4.create()
         var modelView = view * model
         var shader = object.shader
-        gl.bindBuffer(object.geometryHandle)
+        gl.bindBuffer(gl.ARRAY_BUFFER, object.geometryHandle)
         gl.useProgram(shader)
         gl.enableVertexAttribArray(shader.positionAttribute)
         gl.vertexAttribPointer(shader.positionAttribute, 3, gl.FLOAT, false, GEOMETRY_SIZE * 4, 0)
