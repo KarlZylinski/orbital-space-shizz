@@ -1,12 +1,19 @@
 var GEOMETRY_SIZE = 9
 var SUN_POS = [-70, 0, 100]
+var NUM_RENDER_OBJECTS = 4000
 
 window.onload = function()
 {
-    var simulationState = setupSimulation()
-    var rendererState = setupRenderer()
+    var freeRenderHandles = []
+
+    for (var i = 0; i < NUM_RENDER_OBJECTS; ++i)
+        freeRenderHandles[i] = i
+
+    var simulationState = setupSimulation(freeRenderHandles)
+    var rendererState = setupRenderer(freeRenderHandles)
     var startTime = new Date()
     var timeLastFrame = startTime
+
     var interval = setInterval(function() {
         var currentTime = new Date()
         var dt = (currentTime - timeLastFrame) / 1000.0
@@ -18,64 +25,65 @@ window.onload = function()
 
         try
         {
-            var objects = simulate(simulationState, timeSinceStart, dt)
-            var geometry = createGeometry(objects)
-            draw(rendererState, geometry)
+            simulate(simulationState, freeRenderHandles, timeSinceStart, dt)
+            createAddedObjects(rendererState, simulationState.addedObjects)
+            destroyRemovedObjects(rendererState, simulationState.removedObjects)
+            simulationState.addedObjects = []
+            simulationState.removedObjects = []
+            draw(rendererState)
         }
         catch(e)
         {
+            console.error(e)
             clearInterval(interval)
         }
-
     }, 1000/30)
 }
 
-function setupSimulation()
+function spawn(state, type, size, update)
+{
+    var obj = {
+        type: type,
+        size: size,
+        renderHandle: state.freeRenderHandles.pop(),
+        position: vec3.create(),
+        color: vec3.create(),
+        rotation: quat.create(),
+        shader: "default",
+        update: update
+    }
+
+    state.world.push(obj)
+    state.addedObjects.push(obj)
+    return obj
+}
+
+function setupSimulation(freeRendererHandles)
 {
     var state = {}
+    state.freeRenderHandles = freeRendererHandles
+    state.world = []
+    state.addedObjects = []
+    state.removedObjects = []
+    spawn(state, "sphere", 2.0)
     return state
 }
 
 function simulate(state, t, dt)
 {
-    var objects = []
+    for (var i = 0; i < state.world.length; ++i) {
+        var obj = state.world[i]
 
-    var tr = quat.create()
-    quat.rotateX(tr, tr, 3.0)
-    quat.rotateZ(tr, tr, t*3)
-
-    var testTriangle = {
-        type: "triangle",
-        size: 0.5,
-        position: [-2, 0, -3.0],
-        color: [1, 0.7, 0],
-        rotation: tr,
-        shader: "default"
+        if (obj.update)
+            obj.update(obj, dt, t)
     }
-
-    var r = quat.create()
-    quat.rotateZ(r, r, 0.7);
-    quat.rotateY(r, r, t)
-
-    var testSphere = {
-        type: "sphere",
-        size: 2.0,
-        position: [0, 0, -5.0],
-        color: [1, 0.7, 0],
-        rotation: r,
-        shader: "default"
-    }
-
-    objects.push(testTriangle)
-    objects.push(testSphere)
-    return objects
 }
 
 function createSphere(radius)
 {
     var vertices = []
     var normals = []
-    var latitudeBands = longitudeBands = 10 + radius * 10
+    var latitudeBands = longitudeBands = 10
 
     function getCoords(latNumber, longNumber)
     {
@@ -132,7 +140,7 @@ function createSphere(radius)
     }
 }
 
-function createGeometry(objects)
+function createGeometry(state, object)
 {
     function createVertices(object)
     {
@@ -156,7 +164,7 @@ function createGeometry(objects)
             case "sphere":
                 return createSphere(s)
 
-            default: console.assert("Unknown object type.")
+            default: console.error("Unknown object type.")
                 break
         }
     }
@@ -179,26 +187,21 @@ function createGeometry(objects)
         return transformedVertices
     }
 
-    var geometry = []
-    
-    for (var i = 0; i < objects.length; i++)
-    {
-        var object = objects[i]
-        var vertices = createVertices(object)
-        var data = transformVertices(vertices, object.position, object.rotation, object.color)
+    var vertices = createVertices(object)
+    var transformedVertices = transformVertices(vertices, object.position, object.rotation, object.color)
+    var gl = state.gl
+    var geometryBuffer = gl.createBuffer()
+    gl.bindBuffer(gl.ARRAY_BUFFER, geometryBuffer)
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(transformedVertices), gl.STATIC_DRAW)
 
-        var geometryObject = {
-            data: data,
-            shader: object.shader
-        }
-
-        geometry.push(geometryObject)
+    return {
+        geometryHandle: geometryBuffer,
+        size: transformedVertices.length / GEOMETRY_SIZE,
+        shader: state.shaders[object.shader]
     }
-
-    return geometry
 }
 
-function setupRenderer()
+function setupRenderer(freeRenderHandles)
 {
     var state = {}
     var canvas = document.createElement("canvas")
@@ -208,44 +211,54 @@ function setupRenderer()
     var gl = WebGLDebugUtils.makeDebugContext(canvas.getContext("experimental-webgl"))
     state.resolutionX = canvas.width
     state.resolutionY = canvas.height
-
-    if (!gl)
-        console.assert("Failed loading GL.")
-
+    state.world = []
+    console.assert(gl, "Failed loading GL.")
     state.gl = gl
     var ext = initWebGLEW(gl)
     state.shaders = {}
     state.shaders.default = loadShaderProgram(gl, "default-vs", "default-fs")
+    state.objects = []
+    state.freeRenderHandles = freeRenderHandles
+
+    for (var i = 0; i < NUM_RENDER_OBJECTS; ++i)
+        state.objects[i] = -1
+
     gl.clearColor(0.0, 0.0, 0.0, 1.0)
     gl.enable(gl.DEPTH_TEST)
     return state
 }
 
-function draw(state, geometry)
+function createAddedObjects(state, addedObjects)
 {
-    if (geometry.length == 0)
-        console.assert("Nothing to render.")
+    for (var i = 0; i < addedObjects.length; ++i)
+    {
+        var obj = addedObjects[i]
+        var renderObj = createGeometry(state, obj)
+        state.world.push(renderObj)
+    }
+}
 
-    var sortedGeomtry = geometry.sort(function(a, b) {
-        return a.shader < b.shader
-    })
+function destroyRemovedObjects(state, removeObjects)
+{
 
+}
+
+function draw(state)
+{
     var gl = state.gl
     gl.viewport(0, 0, state.resolutionX, state.resolutionY)
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
     var projection = mat4.create()
     mat4.perspective(projection, 45, state.resolutionX / state.resolutionY, 0.1, 100.0)
 
-    function drawBatch(shaderName, vertices)
+    function drawObject(object)
     {
-        var geometryBuffer = gl.createBuffer()
-        gl.bindBuffer(gl.ARRAY_BUFFER, geometryBuffer)
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW)
         var model = mat4.create()
         mat4.identity(model)
         var view = mat4.create()
         var modelView = view * model
-        var shader = state.shaders[shaderName]
+        var shader = object.shader
+        gl.bindBuffer(object.geometryHandle)
         gl.useProgram(shader)
         gl.enableVertexAttribArray(shader.positionAttribute)
         gl.vertexAttribPointer(shader.positionAttribute, 3, gl.FLOAT, false, GEOMETRY_SIZE * 4, 0)
@@ -256,36 +269,16 @@ function draw(state, geometry)
         gl.uniform3fv(shader.sunPositionUniform, SUN_POS)
         gl.uniformMatrix4fv(shader.projectionUniform, false, projection)
         gl.uniformMatrix4fv(shader.modelViewUniform, false, model)
-        gl.drawArrays(gl.TRIANGLES, 0, vertices.length / GEOMETRY_SIZE)
-        gl.deleteBuffer(geometryBuffer)
+        gl.drawArrays(gl.TRIANGLES, 0, object.size)
     }
 
-    var currentBatch = []
-    var currentShader = sortedGeomtry[0].shader
-
-    for (var i = 0; i < sortedGeomtry.length; i++)
-    {
-        var currentGeomtry = sortedGeomtry[i]
-
-        if (currentGeomtry.shader != currentShader)
-        {
-            drawBatch(currentShader, currentBatch)
-            currentShader = currentGeomtry.shader
-            currentBatch = []
-        }
-
-        currentBatch.push.apply(currentBatch, currentGeomtry.data)
-    }
-
-    // Draw last batch.
-    drawBatch(currentShader, currentBatch)
+    for (var i = 0; i < state.world.length; i++)
+        drawObject(state.world[i])
 }
 
 function getShader(gl, name) {
     var shaderScript = document.getElementById(name)
-
-    if (!shaderScript)
-        console.assert("Failed loading shader width name " + name)
+    console.assert(shaderScript, "Failed loading shader width name " + name)
 
     var str = ""
     var k = shaderScript.firstChild
@@ -305,10 +298,7 @@ function getShader(gl, name) {
     var shader = gl.createShader(typeMapping[shaderScript.type])
     gl.shaderSource(shader, str)
     gl.compileShader(shader)
-
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
-        console.assert("Failed compiling shader: " + gl.getShaderInfoLog(shader))
-
+    console.assert(gl.getShaderParameter(shader, gl.COMPILE_STATUS), "Failed compiling shader: " + gl.getShaderInfoLog(shader))
     return shader
 }
 
@@ -320,10 +310,7 @@ function loadShaderProgram(gl, vertexShaderName, fragmentShaderName) {
     gl.attachShader(shaderProgram, vertexShader)
     gl.attachShader(shaderProgram, fragmentShader)
     gl.linkProgram(shaderProgram)
-
-    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS))
-        console.assert("Could not init shaders")
-
+    console.assert(gl.getProgramParameter(shaderProgram, gl.LINK_STATUS), "Could not init shaders")
     shaderProgram.positionAttribute = gl.getAttribLocation(shaderProgram, "position")
     shaderProgram.normalAttribute = gl.getAttribLocation(shaderProgram, "normal")
     shaderProgram.colorAttribute = gl.getAttribLocation(shaderProgram, "color")
