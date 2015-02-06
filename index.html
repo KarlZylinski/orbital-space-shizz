@@ -6,6 +6,8 @@
             attribute vec3 position;
             attribute vec3 normal;
             attribute vec3 color;
+            uniform mat4 modelInverseTranspose;
+            uniform mat4 model;
             uniform mat4 modelView;
             uniform mat4 projection;
             varying vec3 vPosition;
@@ -14,7 +16,7 @@
 
             void main(void) {
                 vColor = color;
-                vNormal = normal;
+                vNormal = (vec4(normal, 1) * modelInverseTranspose).xyz;
                 vPosition = position;
                 gl_Position = projection * modelView * vec4(position, 1.0);
             }

@@ -1,5 +1,5 @@
 var GEOMETRY_SIZE = 9
-var SUN_POS = [-70, 0, 100]
+var SUN_POS = [-1000000, 0, 1000000]
 
 window.onload = function()
 {
@@ -24,7 +24,7 @@ window.onload = function()
             renderer.destroyRemovedObjects(rendererState, simulationState.removedObjects)
             simulationState.addedObjects = []
             simulationState.removedObjects = []
-            renderer.draw(rendererState)
+            renderer.draw(rendererState, simulationState.camera)
         }
         catch(e)
         {
@@ -42,18 +42,29 @@ var simulation = {
         state.addedObjects = []
         state.removedObjects = []
 
+        state.camera = {
+            eye: vec3.create(),
+            target: vec3.create(),
+            up: vec3.create(),
+        }
+
         var planet = simulation.spawn(state, "sphere", 6371, function(obj, dt, t) {
             var r = quat.create()
             quat.rotateY(r, r, t)
             obj.rotation = r
         })
 
-        vec3.add(planet.position, planet.position, [0, 0, -15000])
         return state
     },
 
     simulate: function(state, t, dt)
     {
+        var camera = state.camera
+        camera.eye = [Math.cos(t) * 15000, 0, Math.sin(t) * 15000]
+        camera.target = [0, 0, 0]
+        camera.up = [0, 1, 0]
+        state.camera = camera
+
         for (var i = 0; i < state.world.length; ++i) {
             var obj = state.world[i]
 
@@ -62,7 +73,7 @@ var simulation = {
         }
     },
 
-    spawn: function(state, type, size, position, color, update)
+    spawn: function(state, type, size, update)
     {
         var obj = {
             type: type,
@@ -238,7 +249,7 @@ var renderer = {
         }
     },
 
-    draw: function(state)
+    draw: function(state, camera)
     {
         var gl = state.gl
         gl.viewport(0, 0, state.resolutionX, state.resolutionY)
@@ -250,9 +261,12 @@ var renderer = {
         {
             var model = mat4.create()
             mat4.fromRotationTranslation(model, object.rotation, object.position)
+            var modelInverseTranspose = mat4.clone(model)
+            mat4.invert(modelInverseTranspose, modelInverseTranspose)
             var view = mat4.create()
+            mat4.lookAt(view, camera.eye, camera.target, camera.up)
             var modelView = mat4.create()
-            mat4.multiply(modelView, model, view)
+            mat4.multiply(modelView, view, model)
             var shader = state.shaders[object.shader]
             gl.bindBuffer(gl.ARRAY_BUFFER, object.geometry.handle)
             gl.useProgram(shader)
@@ -263,8 +277,10 @@ var renderer = {
             gl.enableVertexAttribArray(shader.colorAttribute)
             gl.vertexAttribPointer(shader.colorAttribute, 3, gl.FLOAT, false, GEOMETRY_SIZE * 4, 6 * 4)
             gl.uniform3fv(shader.sunPositionUniform, SUN_POS)
+            gl.uniformMatrix4fv(shader.modelInverseTransposeUniform, false, modelInverseTranspose)
             gl.uniformMatrix4fv(shader.projectionUniform, false, projection)
-            gl.uniformMatrix4fv(shader.modelViewUniform, false, model)
+            gl.uniformMatrix4fv(shader.modelUniform, false, model)
+            gl.uniformMatrix4fv(shader.modelViewUniform, false, modelView)
             gl.drawArrays(gl.TRIANGLES, 0, object.geometry.size)
         }
 
@@ -303,7 +319,6 @@ var renderer = {
 
         var vertexShader = getShader(gl, vertexShaderName)
         var fragmentShader = getShader(gl, fragmentShaderName)
-
         shaderProgram = gl.createProgram()
         gl.attachShader(shaderProgram, vertexShader)
         gl.attachShader(shaderProgram, fragmentShader)
@@ -313,7 +328,9 @@ var renderer = {
         shaderProgram.normalAttribute = gl.getAttribLocation(shaderProgram, "normal")
         shaderProgram.colorAttribute = gl.getAttribLocation(shaderProgram, "color")
         shaderProgram.sunPositionUniform = gl.getUniformLocation(shaderProgram, "sunPosition")
+        shaderProgram.modelInverseTransposeUniform = gl.getUniformLocation(shaderProgram, "modelInverseTranspose")
         shaderProgram.projectionUniform = gl.getUniformLocation(shaderProgram, "projection")
+        shaderProgram.modelUniform = gl.getUniformLocation(shaderProgram, "model")
         shaderProgram.modelViewUniform = gl.getUniformLocation(shaderProgram, "modelView")
         return shaderProgram
     }
