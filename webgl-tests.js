@@ -1,5 +1,4 @@
 var GEOMETRY_SIZE = 9
-var SUN_POS = [0, 0, 0]
 
 window.onload = function()
 {
@@ -29,11 +28,12 @@ window.onload = function()
             var inputThisFrame = clone(inputState)
             input.reset(inputState)
             simulation.simulate(simulationState, inputThisFrame, timeSinceStart, dt)
+            rendererState.sunPos = entity.worldPosition(simulationState.sun)
             renderer.createAddedObjects(rendererState, simulationState.addedObjects)
             renderer.destroyRemovedObjects(rendererState, simulationState.removedObjects)
             simulationState.addedObjects = []
             simulationState.removedObjects = []
-            renderer.draw(rendererState, simulationState.camera.view)
+            renderer.draw(rendererState, timeSinceStart, simulationState.camera.view)
         }
         catch(e)
         {
@@ -63,13 +63,32 @@ var input = {
     {
         var state = {
             mouseDeltaX: 0,
-            mouseDeltaY: 0
+            mouseDeltaY: 0,
+            mouseDown: false
         }
 
         document.addEventListener("mousemove", function(e) {
+            if (!state.mouseDown)
+                return
+
             state.mouseDeltaX += e.movementX
             state.mouseDeltaY += e.movementY
         })
+
+        document.addEventListener("mousedown", function(e) {
+            if (e.button != 0)
+                return
+
+            state.mouseDown = true
+        })
+
+        document.addEventListener("mouseup", function(e) {
+            if (e.button != 0)
+                return
+
+            state.mouseDown = false
+        })
+
 
         return state
     },
@@ -91,19 +110,21 @@ var simulation = {
 
         var sunSize = 500
         var planetSize = 6371
-        var sunEnt = entity.spawn(state, "sphere", sunSize, function(obj, dt, t) {
-            entity.rotateY(obj, dt * 100)
-            console.log(obj.rotation)
+        var sunEnt = state.sun = entity.spawn(state, "sphere", sunSize, function(obj, dt, t) {
+            entity.rotateY(obj, dt*2)
         })
         sunEnt.shader = "sun"
         sunEnt.color = [1, 0.9, 0]
 
-        var planet = entity.spawn(state, "sphere", planetSize, function(obj, dt, t) {
+        var planetPivot = entity.spawn(state, null, 0, function(obj, dt, t) {
+        })
+
+        var planet = state.planet = entity.spawn(state, "sphere", planetSize, function(obj, dt, t) {
         })
         planet.shader = "planet"
 
-        planet.color = [0.9, 0.1, 0.1]
-        entity.setParent(planet, sunEnt)
+        planet.color = [0.2, 0.7, 0.1]
+        entity.setParent(planet, planetPivot)
         entity.translate(planet, [0, -planetSize, -planetSize - sunSize])
         entity.rotateY(planet, -50)
 
@@ -128,7 +149,8 @@ var simulation = {
         var rocketSize = 0.08
         state.player = entity.spawn(state, "rocket", rocketSize, function(obj, dt, t) {
         })
-        state.player.color = [0, 1, 0]
+        state.player.color = [0, 1, 1]
+        state.player.shader = "ship"
         entity.setParent(state.player, planet)
 
         var planetNormPos = getCoords(0, 0)
@@ -154,7 +176,7 @@ var simulation = {
 
         state.camera.view = mat4.create()
         entity.setParent(state.camera, state.cameraOrbitEntity)
-        entity.translate(state.camera, [0, 0, 15000])
+        entity.translate(state.camera, [0, 1, 1])
 
         return state
     },
@@ -182,7 +204,8 @@ var entity = {
             rotation: quat.create(),
             model: mat4.create(),
             color: [1, 1, 1],
-            shader: "ship",
+            velocity: [0, 0, 0],
+            shader: "planet",
             update: update
         }
 
@@ -638,7 +661,7 @@ var renderer = {
             var obj = addedObjects[i]
 
             if (!obj.type)
-                return
+                continue
 
             obj.geometry = renderer.createGeometry(state, obj)
             state.world.push(obj)
@@ -652,13 +675,13 @@ var renderer = {
             var obj = removedObjects[i]
 
             if (!obj.type)
-                return
+                continue
 
             gl.deleteBuffer(obj.geometry.handle)
         }
     },
 
-    draw: function(state, view)
+    draw: function(state, time, view)
     {
         var gl = state.gl
         gl.viewport(0, 0, state.resolutionX, state.resolutionY)
@@ -682,11 +705,12 @@ var renderer = {
             gl.vertexAttribPointer(shader.normalAttribute, 3, gl.FLOAT, false, GEOMETRY_SIZE * 4, 3 * 4)
             gl.enableVertexAttribArray(shader.colorAttribute)
             gl.vertexAttribPointer(shader.colorAttribute, 3, gl.FLOAT, false, GEOMETRY_SIZE * 4, 6 * 4)
-            gl.uniform3fv(shader.sunPositionUniform, SUN_POS)
+            gl.uniform3fv(shader.sunPositionUniform, vec3.subtract(vec3.create(), entity.worldPosition(object), state.sunPos))
             gl.uniformMatrix4fv(shader.modelInverseTransposeUniform, false, modelInverseTranspose)
             gl.uniformMatrix4fv(shader.projectionUniform, false, projection)
             gl.uniformMatrix4fv(shader.modelUniform, false, model)
             gl.uniformMatrix4fv(shader.modelViewUniform, false, modelView)
+            gl.uniform1f(shader.timeUniform, false, time)
             gl.drawArrays(gl.TRIANGLES, 0, object.geometry.size)
         }
 
@@ -738,6 +762,7 @@ var renderer = {
         shaderProgram.projectionUniform = gl.getUniformLocation(shaderProgram, "projection")
         shaderProgram.modelUniform = gl.getUniformLocation(shaderProgram, "model")
         shaderProgram.modelViewUniform = gl.getUniformLocation(shaderProgram, "modelView")
+        shaderProgram.timeUniform = gl.getUniformLocation(shaderProgram, "time")
         return shaderProgram
     }
 }

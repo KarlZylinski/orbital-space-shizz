@@ -10,21 +10,26 @@
             uniform mat4 model;
             uniform mat4 modelView;
             uniform mat4 projection;
-            varying vec3 vPosition;
+            uniform float time;
+            varying vec3 vWorldPos;
+            varying vec3 vLocalPos;
             varying vec3 vNormal;
             varying vec3 vColor;
 
             void main(void) {
                 vColor = color;
                 vNormal = (vec4(normal, 1) * model).xyz;
-                vPosition = position;
+                vec4 position4 = model * vec4(position, 1.0);
+                vWorldPos = vec3(position4);
+                vLocalPos = position;
                 gl_Position = projection * modelView * vec4(position, 1.0);
             }
         </script>
 
         <script id="planet-fs" type="x-shader/x-fragment">
             precision highp float;
-            varying vec3 vPosition;
+            varying vec3 vWorldPos;
+            varying vec3 vLocalPos;
             varying vec3 vNormal;
             varying vec3 vColor;
             uniform vec3 sunPosition;
@@ -135,10 +140,10 @@
             void main(void) {
                 vec3 nSunPos = normalize(-sunPosition);
                 vec3 nNormal = normalize(vNormal);
-                float noise = snoise(vPosition * 0.1);
+                float noise = snoise(vLocalPos * 0.1);
                 float light = dot(nSunPos, nNormal);
-                float ambient = max(0.0, 0.3 - light);
-                gl_FragColor = vec4(vColor * ambient + vColor * light * noise, 1);
+                float ambient = max(0.2, 0.3 - light);
+                gl_FragColor = vec4(vec3(vColor * ambient + vColor * light) * max(0.4, noise), 1);
             }
         </script>
 
@@ -150,24 +155,30 @@
             uniform mat4 model;
             uniform mat4 modelView;
             uniform mat4 projection;
-            varying vec3 vPosition;
+            uniform float time;
+            varying vec3 vWorldPos;
+            varying vec3 vLocalPos;
             varying vec3 vNormal;
             varying vec3 vColor;
 
             void main(void) {
                 vColor = color;
                 vNormal = (vec4(normal, 1) * model).xyz;
-                vPosition = position;
+                vec4 position4 = model * vec4(position, 1.0);
+                vWorldPos = vec3(position4);
+                vLocalPos = position;
                 gl_Position = projection * modelView * vec4(position, 1.0);
             }
         </script>
 
         <script id="sun-fs" type="x-shader/x-fragment">
             precision highp float;
-            varying vec3 vPosition;
+            varying vec3 vWorldPos;
+            varying vec3 vLocalPos;
             varying vec3 vNormal;
             varying vec3 vColor;
             uniform vec3 sunPosition;
+            uniform float time;
 
             //
             // Description : Array and textureless GLSL 2D/3D/4D simplex 
@@ -273,7 +284,8 @@
             }
 
             void main(void) {
-                float noise = min(1.0, max(0.0, snoise(vPosition * 0.01)) + 0.7);
+                float t = time * 1000.0;
+                float noise = min(1.0, max(0.3, snoise(vLocalPos * ((cos(time) + 1.0) / 2.0) * 0.01) + 0.6));
                 gl_FragColor = vec4(vColor * noise, 1);
             }
         </script>
@@ -286,21 +298,26 @@
             uniform mat4 model;
             uniform mat4 modelView;
             uniform mat4 projection;
-            varying vec3 vPosition;
+            uniform float time;
+            varying vec3 vWorldPos;
+            varying vec3 vLocalPos;
             varying vec3 vNormal;
             varying vec3 vColor;
 
             void main(void) {
                 vColor = color;
                 vNormal = (vec4(normal, 1) * model).xyz;
-                vPosition = position;
+                vec4 position4 = model * vec4(position, 1.0);
+                vWorldPos = vec3(position4);
+                vLocalPos = position;
                 gl_Position = projection * modelView * vec4(position, 1.0);
             }
         </script>
 
         <script id="ship-fs" type="x-shader/x-fragment">
             precision highp float;
-            varying vec3 vPosition;
+            varying vec3 vWorldPos;
+            varying vec3 vLocalPos;
             varying vec3 vNormal;
             varying vec3 vColor;
             uniform vec3 sunPosition;
@@ -411,9 +428,10 @@
             void main(void) {
                 vec3 nSunPos = normalize(-sunPosition);
                 vec3 nNormal = normalize(vNormal);
+                vec3 special = normalize(vLocalPos);
                 float light = dot(nSunPos, nNormal);
-                float ambient = max(0.0, 0.3 - light);
-                gl_FragColor = vec4(vColor * ambient + vColor * light, 1);
+                float ambient = max(0.3, 0.3 - light);
+                gl_FragColor = vec4(special * ambient + special * light, 1);
             }
         </script>
 
