@@ -5,6 +5,7 @@ window.onload = function()
 {
     var simulationState = simulation.setup()
     var rendererState = renderer.setup()
+    var inputState = input.setup()
     var startTime = new Date()
     var timeLastFrame = null
 
@@ -25,7 +26,9 @@ window.onload = function()
 
         try
         {
-            simulation.simulate(simulationState, timeSinceStart, dt)
+            var inputThisFrame = clone(inputState)
+            input.reset(inputState)
+            simulation.simulate(simulationState, inputThisFrame, timeSinceStart, dt)
             renderer.createAddedObjects(rendererState, simulationState.addedObjects)
             renderer.destroyRemovedObjects(rendererState, simulationState.removedObjects)
             simulationState.addedObjects = []
@@ -40,6 +43,44 @@ window.onload = function()
     }, 1000/30)
 }
 
+function clone(obj) {
+    if (null == obj || "object" != typeof obj)
+        return obj
+
+    var copy = obj.constructor()
+
+    for (var attr in obj)
+    {
+        if (obj.hasOwnProperty(attr))
+            copy[attr] = obj[attr]
+    }
+    
+    return copy
+}
+
+var input = {
+    setup: function()
+    {
+        var state = {
+            mouseDeltaX: 0,
+            mouseDeltaY: 0
+        }
+
+        document.addEventListener("mousemove", function(e) {
+            state.mouseDeltaX += e.movementX
+            state.mouseDeltaY += e.movementY
+        })
+
+        return state
+    },
+
+    reset: function(state)
+    {
+        state.mouseDeltaX = 0
+        state.mouseDeltaY = 0
+    }
+}
+
 var simulation = {
     setup: function()
     {
@@ -50,7 +91,7 @@ var simulation = {
 
         var planetSize = 6371
         var planet = entity.spawn(state, "sphere", planetSize, function(obj, dt, t) {
-            entity.rotateY(obj, dt * 100)
+            entity.rotateZ(obj, dt * 100)
         })
 
         planet.color = [0.9, 0.1, 0.1]
@@ -81,11 +122,17 @@ var simulation = {
         state.player.color = [0, 1, 0]
         entity.setParent(state.player, planet)
 
-        state.camera = entity.spawn(state, null, 0, function(obj, dt, t) {
+        state.cameraOrbitEntity = entity.spawn(state, null, 0, function(obj, dt, t, input) {
+            entity.rotateY(obj, -input.mouseDeltaX/500.0)
+            entity.rotateX(obj, -input.mouseDeltaY/500.0)
+        })
+        entity.setParent(state.cameraOrbitEntity, state.player)
+
+        state.camera = entity.spawn(state, null, 0, function(obj, dt, t, input) {
             obj.view = mat4.lookAt(obj.view,
                 entity.worldPosition(obj),
                 entity.worldPosition(obj.parent),
-                vec3.subtract(vec3.create(), entity.worldPosition(obj.parent), entity.worldPosition(obj.parent.parent)))
+                vec3.subtract(vec3.create(), entity.worldPosition(obj), entity.worldPosition(planet)))
         })
 
         var planetNormPos = getCoords(0, 0)
@@ -93,20 +140,20 @@ var simulation = {
         entity.translate(state.player, offset)
 
         state.camera.view = mat4.create()
-        entity.setParent(state.camera, state.player)
+        entity.setParent(state.camera, state.cameraOrbitEntity)
         entity.translate(state.camera, [0, 0, 1])
 
         return state
     },
 
-    simulate: function(state, t, dt)
+    simulate: function(state, input, t, dt)
     {
         for (var i = 0; i < state.world.length; ++i)
         {
             var obj = state.world[i]
 
             if (obj.update)
-                obj.update(obj, dt, t)
+                obj.update(obj, dt, t, input)
         }
     }
 }
@@ -259,6 +306,8 @@ var renderer = {
         function createVertices(object)
         {
             var s = object.size
+            var rw = 3.5
+            var tw = 4
             switch(object.type)
             {
                 case "triangle":
@@ -281,14 +330,155 @@ var renderer = {
                 case "rocket":
                     return {
                         vertices: [
+                            // Top front
                             [0, s/2, 0,],
-                            [s/2, 0, 0],
-                            [-s/2, 0, 0]
+                            [s/2, 0, s/2],
+                            [-s/2, 0, s/2],
+
+                            // Top right
+                            [0, s/2, 0,],
+                            [s/2, 0, -s/2],
+                            [s/2, 0, s/2],
+
+                            // Top back
+                            [0, s/2, 0,],
+                            [s/2, 0, -s/2],
+                            [-s/2, 0, -s/2],
+
+                            // Top left
+                            [0, s/2, 0,],
+                            [-s/2, 0, -s/2],
+                            [-s/2, 0, s/2],
+
+                            // Bottom
+                            [-s/2, 0, s/2],
+                            [s/2, 0, s/2],
+                            [-s/2, 0, -s/2],
+                            [s/2, 0, s/2],
+                            [s/2, 0, -s/2],
+                            [-s/2, 0, -s/2],
+
+                            // Right side
+                            [s/rw, 0, s/rw],
+                            [s/rw, 0, -s/rw],
+                            [s/rw, -s, -s/rw],
+                            [s/rw, 0, s/rw],
+                            [s/rw, -s, s/rw],
+                            [s/rw, -s, -s/rw],
+
+                            // Left side
+                            [-s/rw, 0, s/rw],
+                            [-s/rw, 0, -s/rw],
+                            [-s/rw, -s, -s/rw],
+                            [-s/rw, 0, s/rw],
+                            [-s/rw, -s, s/rw],
+                            [-s/rw, -s, -s/rw],
+
+                            // Front side
+                            [s/rw, 0, s/rw],
+                            [-s/rw, 0, s/rw],
+                            [-s/rw, -s, s/rw],
+                            [s/rw, 0, s/rw],
+                            [s/rw, -s, s/rw],
+                            [-s/rw, -s, s/rw],
+
+                            // Back side
+                            [s/rw, 0, -s/rw],
+                            [-s/rw, 0, -s/rw],
+                            [-s/rw, -s, -s/rw],
+                            [s/rw, 0, -s/rw],
+                            [s/rw, -s, -s/rw],
+                            [-s/rw, -s, -s/rw],
+
+                            // Far bottom
+                            [-s/rw, -s, s/rw],
+                            [s/rw, -s, s/rw],
+                            [-s/rw, -s, -s/rw],
+                            [s/rw, -s, s/rw],
+                            [s/rw, -s, -s/rw],
+                            [-s/rw, -s, -s/rw],
+
+                            // Thruster front
+                            [0, -s+s/5, 0],
+                            [s/tw, -s-s/rw, s/tw],
+                            [-s/tw, -s-s/rw, s/tw],
+
+                            // Thruster right
+                            [0, -s+s/5, 0],
+                            [s/tw, -s-s/rw, -s/tw],
+                            [s/tw, -s-s/rw, s/tw],
+
+                            // Thruster back
+                            [0, -s+s/5, 0],
+                            [s/tw, -s-s/rw, -s/tw],
+                            [-s/tw, -s-s/rw, -s/tw],
+
+                            // Thruster left
+                            [0, -s+s/5, 0],
+                            [-s/tw, -s-s/rw, -s/tw],
+                            [-s/tw, -s-s/rw, s/tw]
                         ],
                     normals: [
-                            [0, 0, -1],
-                            [0, 0, -1],
-                            [0, 0, -1]
+                            [0, 0.1, -0.9],
+                            [0, 0.1, -0.9], 
+                            [0, 0.1, -0.9],
+                            [0.9, 0.1, 0],
+                            [0.9, 0.1, 0],
+                            [0.9, 0.1, 0],
+                            [0, 0.1, 0.9],
+                            [0, 0.1, 0.9], 
+                            [0, 0.1, 0.9],
+                            [-0.9, 0.1, 0],
+                            [-0.9, 0.1, 0],
+                            [-0.9, 0.1, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [1.0, 0, 0],
+                            [1.0, 0, 0],
+                            [1.0, 0, 0],
+                            [1.0, 0, 0],
+                            [1.0, 0, 0],
+                            [1.0, 0, 0],
+                            [-1.0, 0, 0],
+                            [-1.0, 0, 0],
+                            [-1.0, 0, 0],
+                            [-1.0, 0, 0],
+                            [-1.0, 0, 0],
+                            [-1.0, 0, 0],
+                            [0, 0, 1.0],
+                            [0, 0, 1.0],
+                            [0, 0, 1.0],
+                            [0, 0, 1.0],
+                            [0, 0, 1.0],
+                            [0, 0, 1.0],
+                            [0, 0, -1.0],
+                            [0, 0, -1.0],
+                            [0, 0, -1.0],
+                            [0, 0, -1.0],
+                            [0, 0, -1.0],
+                            [0, 0, -1.0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, 0.1, -0.9],
+                            [0, 0.1, -0.9], 
+                            [0, 0.1, -0.9],
+                            [0.9, 0.1, 0],
+                            [0.9, 0.1, 0],
+                            [0.9, 0.1, 0],
+                            [0, 0.1, 0.9],
+                            [0, 0.1, 0.9], 
+                            [0, 0.1, 0.9],
+                            [-0.9, 0.1, 0],
+                            [-0.9, 0.1, 0],
+                            [-0.9, 0.1, 0]
                         ]
                     }
 
