@@ -91,7 +91,7 @@ var simulation = {
 
         var planetSize = 6371
         var planet = entity.spawn(state, "sphere", planetSize, function(obj, dt, t) {
-            entity.rotateZ(obj, dt * 100)
+            entity.rotateZ(obj, dt)
         })
 
         planet.color = [0.9, 0.1, 0.1]
@@ -116,11 +116,18 @@ var simulation = {
             return [x, y, z]
         }
 
+
         var rocketSize = 0.08
         state.player = entity.spawn(state, "rocket", rocketSize, function(obj, dt, t) {
         })
         state.player.color = [0, 1, 0]
         entity.setParent(state.player, planet)
+
+        var planetNormPos = getCoords(0, 0)
+        var offset = vec3.scale(vec3.create(), planetNormPos, planetSize + 0.2)
+        var base = entity.spawn(state, "box", 0.7)
+        entity.setParent(base, planet)
+        entity.translate(base, vec3.subtract(vec3.create(), offset, [0, 0.45, 0]))
 
         state.cameraOrbitEntity = entity.spawn(state, null, 0, function(obj, dt, t, input) {
             entity.rotateY(obj, -input.mouseDeltaX/500.0)
@@ -135,8 +142,6 @@ var simulation = {
                 vec3.subtract(vec3.create(), entity.worldPosition(obj), entity.worldPosition(planet)))
         })
 
-        var planetNormPos = getCoords(0, 0)
-        var offset = vec3.scale(vec3.create(), planetNormPos, planetSize + 0.4)
         entity.translate(state.player, offset)
 
         state.camera.view = mat4.create()
@@ -308,12 +313,13 @@ var renderer = {
             var s = object.size
             var rw = 3.5
             var tw = 4
+            var h = s/2
             switch(object.type)
             {
                 case "triangle":
                     return {
                         vertices: [
-                                [0, s/2, 0,],
+                                [0, s/2, 0],
                                 [s/2, 0, 0],
                                 [-s/2, 0, 0]
                             ],
@@ -326,6 +332,83 @@ var renderer = {
 
                 case "sphere":
                     return createSphere(s)
+
+                case "box":
+                    return {
+                        vertices: [
+                                // Back
+                                [h, h, -h],
+                                [h, 0, -h],
+                                [-h, 0, -h],
+                                [-h, 0, -h],
+                                [-h, h, -h],
+                                [h, h, -h],
+
+                                // Front
+                                [h, h, h],
+                                [h, 0, h],
+                                [-h, 0, h],
+                                [-h, 0, h],
+                                [-h, h, h],
+                                [h, h, h],
+
+                                 // Right
+                                [h, h, h],
+                                [h, 0, h],
+                                [h, 0, -h],
+                                [h, 0, -h],
+                                [h, h, -h],
+                                [h, h, h],
+
+                                 // Left
+                                [-h, h, h],
+                                [-h, 0, h],
+                                [-h, 0, -h],
+                                [-h, 0, -h],
+                                [-h, h, -h],
+                                [-h, h, h],
+
+                                 // Top
+                                [-h, h, -h],
+                                [h, h, -h],
+                                [-h, h, h],
+                                [h, h, -h],
+                                [h, h, h],
+                                [-h, h, h]
+                            ],
+                        normals: [
+                                [0, 0, -1],
+                                [0, 0, -1],
+                                [0, 0, -1],
+                                [0, 0, -1],
+                                [0, 0, -1],
+                                [0, 0, -1],
+                                [0, 0, 1],
+                                [0, 0, 1],
+                                [0, 0, 1],
+                                [0, 0, 1],
+                                [0, 0, 1],
+                                [0, 0, 1],
+                                [1, 0, 0],
+                                [1, 0, 0],
+                                [1, 0, 0],
+                                [1, 0, 0],
+                                [1, 0, 0],
+                                [1, 0, 0],
+                                [-1, 0, 0],
+                                [-1, 0, 0],
+                                [-1, 0, 0],
+                                [-1, 0, 0],
+                                [-1, 0, 0],
+                                [-1, 0, 0],
+                                [0, 1, 0],
+                                [0, 1, 0],
+                                [0, 1, 0],
+                                [0, 1, 0],
+                                [0, 1, 0],
+                                [0, 1, 0]
+                            ]
+                        }
 
                 case "rocket":
                     return {
@@ -419,18 +502,18 @@ var renderer = {
                             [-s/tw, -s-s/rw, s/tw]
                         ],
                     normals: [
-                            [0, 0.1, -0.9],
-                            [0, 0.1, -0.9], 
-                            [0, 0.1, -0.9],
-                            [0.9, 0.1, 0],
-                            [0.9, 0.1, 0],
-                            [0.9, 0.1, 0],
-                            [0, 0.1, 0.9],
-                            [0, 0.1, 0.9], 
-                            [0, 0.1, 0.9],
-                            [-0.9, 0.1, 0],
-                            [-0.9, 0.1, 0],
-                            [-0.9, 0.1, 0],
+                            [0, 0.5, -0.5],
+                            [0, 0.5, -0.5], 
+                            [0, 0.5, -0.5],
+                            [0.5, 0.5, 0],
+                            [0.5, 0.5, 0],
+                            [0.5, 0.5, 0],
+                            [0, 0.5, 0.5],
+                            [0, 0.5, 0.5], 
+                            [0, 0.5, 0.5],
+                            [-0.5, 0.5, 0],
+                            [-0.5, 0.5, 0],
+                            [-0.5, 0.5, 0],
                             [0, -1.0, 0],
                             [0, -1.0, 0],
                             [0, -1.0, 0],
@@ -467,18 +550,18 @@ var renderer = {
                             [0, -1.0, 0],
                             [0, -1.0, 0],
                             [0, -1.0, 0],
-                            [0, 0.1, -0.9],
-                            [0, 0.1, -0.9], 
-                            [0, 0.1, -0.9],
-                            [0.9, 0.1, 0],
-                            [0.9, 0.1, 0],
-                            [0.9, 0.1, 0],
-                            [0, 0.1, 0.9],
-                            [0, 0.1, 0.9], 
-                            [0, 0.1, 0.9],
-                            [-0.9, 0.1, 0],
-                            [-0.9, 0.1, 0],
-                            [-0.9, 0.1, 0]
+                            [0, 0.5, -0.5],
+                            [0, 0.5, -0.5], 
+                            [0, 0.5, -0.5],
+                            [0.5, 0.5, 0],
+                            [0.5, 0.5, 0],
+                            [0.5, 0.5, 0],
+                            [0, 0.5, 0.5],
+                            [0, 0.5, 0.5], 
+                            [0, 0.5, 0.5],
+                            [-0.5, 0.5, 0],
+                            [-0.5, 0.5, 0],
+                            [-0.5, 0.5, 0]
                         ]
                     }
 
@@ -571,7 +654,7 @@ var renderer = {
         gl.viewport(0, 0, state.resolutionX, state.resolutionY)
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
         var projection = mat4.create()
-        mat4.perspective(projection, 45, state.resolutionX / state.resolutionY, 0.1, 20000.0)
+        mat4.perspective(projection, 45, state.resolutionX / state.resolutionY, 0.5, 1000.0)
 
         function drawObject(object)
         {
