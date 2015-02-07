@@ -1,5 +1,5 @@
 var GEOMETRY_SIZE = 9
-var SUN_POS = [-1000000, 0, 1000000]
+var SUN_POS = [0, 0, 0]
 
 window.onload = function()
 {
@@ -89,13 +89,22 @@ var simulation = {
         state.addedObjects = []
         state.removedObjects = []
 
+        var sunSize = 500
         var planetSize = 6371
-        var planet = entity.spawn(state, "sphere", planetSize, function(obj, dt, t) {
-            entity.rotateZ(obj, dt)
+        var sunEnt = entity.spawn(state, "sphere", sunSize, function(obj, dt, t) {
+            entity.rotateY(obj, dt * 100)
+            console.log(obj.rotation)
         })
+        sunEnt.shader = "sun"
+        sunEnt.color = [1, 0.9, 0]
+
+        var planet = entity.spawn(state, "sphere", planetSize, function(obj, dt, t) {
+        })
+        planet.shader = "planet"
 
         planet.color = [0.9, 0.1, 0.1]
-        entity.translate(planet, [500, -2552, 12121])
+        entity.setParent(planet, sunEnt)
+        entity.translate(planet, [0, -planetSize, -planetSize - sunSize])
         entity.rotateY(planet, -50)
 
         function getCoords(latNumber, longNumber)
@@ -115,7 +124,6 @@ var simulation = {
 
             return [x, y, z]
         }
-
 
         var rocketSize = 0.08
         state.player = entity.spawn(state, "rocket", rocketSize, function(obj, dt, t) {
@@ -146,7 +154,7 @@ var simulation = {
 
         state.camera.view = mat4.create()
         entity.setParent(state.camera, state.cameraOrbitEntity)
-        entity.translate(state.camera, [0, 0, 1])
+        entity.translate(state.camera, [0, 0, 15000])
 
         return state
     },
@@ -174,7 +182,7 @@ var entity = {
             rotation: quat.create(),
             model: mat4.create(),
             color: [1, 1, 1],
-            shader: "default",
+            shader: "ship",
             update: update
         }
 
@@ -502,63 +510,63 @@ var renderer = {
                             [-s/tw, -s-s/rw, s/tw]
                         ],
                     normals: [
-                            [0, 0.5, -0.5],
-                            [0, 0.5, -0.5], 
-                            [0, 0.5, -0.5],
-                            [0.5, 0.5, 0],
-                            [0.5, 0.5, 0],
-                            [0.5, 0.5, 0],
                             [0, 0.5, 0.5],
                             [0, 0.5, 0.5], 
                             [0, 0.5, 0.5],
-                            [-0.5, 0.5, 0],
-                            [-0.5, 0.5, 0],
-                            [-0.5, 0.5, 0],
-                            [0, -1.0, 0],
-                            [0, -1.0, 0],
-                            [0, -1.0, 0],
-                            [0, -1.0, 0],
-                            [0, -1.0, 0],
-                            [0, -1.0, 0],
-                            [1.0, 0, 0],
-                            [1.0, 0, 0],
-                            [1.0, 0, 0],
-                            [1.0, 0, 0],
-                            [1.0, 0, 0],
-                            [1.0, 0, 0],
-                            [-1.0, 0, 0],
-                            [-1.0, 0, 0],
-                            [-1.0, 0, 0],
-                            [-1.0, 0, 0],
-                            [-1.0, 0, 0],
-                            [-1.0, 0, 0],
-                            [0, 0, 1.0],
-                            [0, 0, 1.0],
-                            [0, 0, 1.0],
-                            [0, 0, 1.0],
-                            [0, 0, 1.0],
-                            [0, 0, 1.0],
-                            [0, 0, -1.0],
-                            [0, 0, -1.0],
-                            [0, 0, -1.0],
-                            [0, 0, -1.0],
-                            [0, 0, -1.0],
-                            [0, 0, -1.0],
-                            [0, -1.0, 0],
-                            [0, -1.0, 0],
-                            [0, -1.0, 0],
-                            [0, -1.0, 0],
-                            [0, -1.0, 0],
-                            [0, -1.0, 0],
+                            [0.5, 0.5, 0],
+                            [0.5, 0.5, 0],
+                            [0.5, 0.5, 0],
                             [0, 0.5, -0.5],
                             [0, 0.5, -0.5], 
                             [0, 0.5, -0.5],
-                            [0.5, 0.5, 0],
-                            [0.5, 0.5, 0],
-                            [0.5, 0.5, 0],
+                            [-0.5, 0.5, 0],
+                            [-0.5, 0.5, 0],
+                            [-0.5, 0.5, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [1.0, 0, 0],
+                            [1.0, 0, 0],
+                            [1.0, 0, 0],
+                            [1.0, 0, 0],
+                            [1.0, 0, 0],
+                            [1.0, 0, 0],
+                            [-1.0, 0, 0],
+                            [-1.0, 0, 0],
+                            [-1.0, 0, 0],
+                            [-1.0, 0, 0],
+                            [-1.0, 0, 0],
+                            [-1.0, 0, 0],
+                            [0, 0, 1.0],
+                            [0, 0, 1.0],
+                            [0, 0, 1.0],
+                            [0, 0, 1.0],
+                            [0, 0, 1.0],
+                            [0, 0, 1.0],
+                            [0, 0, -1.0],
+                            [0, 0, -1.0],
+                            [0, 0, -1.0],
+                            [0, 0, -1.0],
+                            [0, 0, -1.0],
+                            [0, 0, -1.0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
+                            [0, -1.0, 0],
                             [0, 0.5, 0.5],
                             [0, 0.5, 0.5], 
                             [0, 0.5, 0.5],
+                            [0.5, 0.5, 0],
+                            [0.5, 0.5, 0],
+                            [0.5, 0.5, 0],
+                            [0, 0.5, -0.5],
+                            [0, 0.5, -0.5], 
+                            [0, 0.5, -0.5],
                             [-0.5, 0.5, 0],
                             [-0.5, 0.5, 0],
                             [-0.5, 0.5, 0]
@@ -615,7 +623,9 @@ var renderer = {
         state.gl = gl
         var ext = initWebGLEW(gl)
         state.shaders = {}
-        state.shaders.default = renderer.loadShaderProgram(gl, "default-vs", "default-fs")
+        state.shaders.sun = renderer.loadShaderProgram(gl, "sun-vs", "sun-fs")
+        state.shaders.ship = renderer.loadShaderProgram(gl, "ship-vs", "ship-fs")
+        state.shaders.planet = renderer.loadShaderProgram(gl, "planet-vs", "planet-fs")
         gl.clearColor(0.0, 0.0, 0.0, 1.0)
         gl.enable(gl.DEPTH_TEST)
         return state
@@ -654,7 +664,7 @@ var renderer = {
         gl.viewport(0, 0, state.resolutionX, state.resolutionY)
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
         var projection = mat4.create()
-        mat4.perspective(projection, 45, state.resolutionX / state.resolutionY, 0.5, 1000.0)
+        mat4.perspective(projection, 45, state.resolutionX / state.resolutionY, 0.5, 20000.0)
 
         function drawObject(object)
         {
