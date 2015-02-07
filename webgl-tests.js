@@ -30,7 +30,7 @@ window.onload = function()
             renderer.destroyRemovedObjects(rendererState, simulationState.removedObjects)
             simulationState.addedObjects = []
             simulationState.removedObjects = []
-            renderer.draw(rendererState, simulationState.camera)
+            renderer.draw(rendererState, simulationState.camera.view)
         }
         catch(e)
         {
@@ -48,16 +48,14 @@ var simulation = {
         state.addedObjects = []
         state.removedObjects = []
 
-        state.camera = {
-            eye: vec3.create(),
-            target: vec3.create(),
-            up: vec3.create()
-        }
-
         var planetSize = 6371
         var planet = entity.spawn(state, "sphere", planetSize, function(obj, dt, t) {
-            entity.rotateY(obj, t*100)
+            entity.rotateY(obj, dt * 100)
         })
+
+        planet.color = [0.9, 0.1, 0.1]
+        entity.translate(planet, [500, -2552, 12121])
+        entity.rotateY(planet, -50)
 
         function getCoords(latNumber, longNumber)
         {
@@ -80,26 +78,31 @@ var simulation = {
         var rocketSize = 0.08
         state.player = entity.spawn(state, "rocket", rocketSize, function(obj, dt, t) {
         })
+        state.player.color = [0, 1, 0]
         entity.setParent(state.player, planet)
 
-        var planetNormPos = getCoords(3, 5)
-        var offset = vec3.add(vec3.create(),
-            vec3.scale(vec3.create(), planetNormPos, planetSize),
-            vec3.scale(vec3.create(), planetNormPos, rocketSize))
+        state.camera = entity.spawn(state, null, 0, function(obj, dt, t) {
+            obj.view = mat4.lookAt(obj.view,
+                entity.worldPosition(obj),
+                entity.worldPosition(obj.parent),
+                vec3.subtract(vec3.create(), entity.worldPosition(obj.parent), entity.worldPosition(obj.parent.parent)))
+        })
+
+        var planetNormPos = getCoords(0, 0)
+        var offset = vec3.scale(vec3.create(), planetNormPos, planetSize + 0.4)
         entity.translate(state.player, offset)
+
+        state.camera.view = mat4.create()
+        entity.setParent(state.camera, state.player)
+        entity.translate(state.camera, [0, 0, 1])
+
         return state
     },
 
     simulate: function(state, t, dt)
     {
-        var p = [state.player.model[12], state.player.model[13], state.player.model[14]]
-        var camera = state.camera
-        camera.eye = vec3.add(camera.eye, p, [0, 0, -0.5])
-        camera.target = p
-        camera.up = [0, 1, 0]
-        state.camera = camera
-
-        for (var i = 0; i < state.world.length; ++i) {
+        for (var i = 0; i < state.world.length; ++i)
+        {
             var obj = state.world[i]
 
             if (obj.update)
@@ -125,6 +128,7 @@ var entity = {
 
         simulationState.world.push(e)
         simulationState.addedObjects.push(e)
+        entity.calculateModel(e)
         return e
     },
 
@@ -150,9 +154,21 @@ var entity = {
         }
     },
 
+    worldPosition: function(e)
+    {
+        var model = e.model
+        return [model[12], model[13], model[14]]
+    },
+
     translate: function(e, vec)
     {
         vec3.add(e.position, e.position, vec)
+        entity.calculateModel(e)
+    },
+
+    rotateX: function(e, rads)
+    {
+        quat.rotateX(e.rotation, e.rotation, rads)
         entity.calculateModel(e)
     },
 
@@ -162,10 +178,17 @@ var entity = {
         entity.calculateModel(e)
     },
 
+    rotateZ: function(e, rads)
+    {
+        quat.rotateZ(e.rotation, e.rotation, rads)
+        entity.calculateModel(e)
+    },
+
     setParent: function(e, parent)
     {
         parent.children.push(e)
         e.parent = parent
+        entity.calculateModel(e)
     }
 }
 
@@ -274,7 +297,7 @@ var renderer = {
             }
         }
 
-        function packVertices(geometry, position, rotation, color)
+        function packVertices(geometry, color)
         {
             var transformedVertices = []
 
@@ -288,8 +311,11 @@ var renderer = {
             return transformedVertices
         }
 
+        if (object.type == null)
+            return null
+
         var vertices = createVertices(object)
-        var transformedVertices = packVertices(vertices, object.position, object.rotation, object.color)
+        var transformedVertices = packVertices(vertices, object.color)
         var gl = state.gl
         var handle = gl.createBuffer()
         gl.bindBuffer(gl.ARRAY_BUFFER, handle)
@@ -327,6 +353,10 @@ var renderer = {
         for (var i = 0; i < addedObjects.length; ++i)
         {
             var obj = addedObjects[i]
+
+            if (!obj.type)
+                return
+
             obj.geometry = renderer.createGeometry(state, obj)
             state.world.push(obj)
         }
@@ -337,11 +367,15 @@ var renderer = {
         for (var i = 0; i < removedObjects.length; ++i)
         {
             var obj = removedObjects[i]
+
+            if (!obj.type)
+                return
+
             gl.deleteBuffer(obj.geometry.handle)
         }
     },
 
-    draw: function(state, camera)
+    draw: function(state, view)
     {
         var gl = state.gl
         gl.viewport(0, 0, state.resolutionX, state.resolutionY)
@@ -354,8 +388,6 @@ var renderer = {
             var model = object.model
             var modelInverseTranspose = mat4.clone(model)
             mat4.invert(modelInverseTranspose, modelInverseTranspose)
-            var view = mat4.create()
-            mat4.lookAt(view, camera.eye, camera.target, camera.up)
             var modelView = mat4.create()
             mat4.multiply(modelView, view, model)
             var shader = state.shaders[object.shader]
