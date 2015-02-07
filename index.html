@@ -284,9 +284,12 @@
             }
 
             void main(void) {
-                float t = time * 1000.0;
-                float noise = min(1.0, max(0.3, snoise(vLocalPos * ((cos(time) + 1.0) / 2.0) * 0.01) + 0.6));
-                gl_FragColor = vec4(vColor * noise, 1);
+                float t = time*100.0;
+                float s1 = snoise(abs(vLocalPos + vec3(t, t, t)) * 0.001);
+                float s2 = snoise(abs(vec3(2354.0,123.0,1235.0) + vLocalPos + vec3(-t*4.0, -t/2.0, -t)) * 0.0005);
+                vec3 c1 = max(vec3(0.3, 0.2, 0.0), vec3(1.0, 0.6, 0.0) * s2);
+                vec3 c2 = max(vec3(0.2, 0.2, 0.0), vColor * s1);
+                gl_FragColor = vec4(c1 + c2, 1.0);
             }
         </script>
 

@@ -1,4 +1,5 @@
 var GEOMETRY_SIZE = 9
+var TIME_SCALE = 1
 
 window.onload = function()
 {
@@ -17,23 +18,25 @@ window.onload = function()
 
         var timeSinceStart = (currentTime - startTime) / 1000.0
         var timeLastFrame = currentTime
+        var time = timeSinceStart * TIME_SCALE
 
         if (dt === 0)
             dt = 1
 
         dt = dt / 1000.0
+        dt *= TIME_SCALE
 
         try
         {
             var inputThisFrame = clone(inputState)
             input.reset(inputState)
-            simulation.simulate(simulationState, inputThisFrame, timeSinceStart, dt)
+            simulation.simulate(simulationState, inputThisFrame, time, dt)
             rendererState.sunPos = entity.worldPosition(simulationState.sun)
             renderer.createAddedObjects(rendererState, simulationState.addedObjects)
             renderer.destroyRemovedObjects(rendererState, simulationState.removedObjects)
             simulationState.addedObjects = []
             simulationState.removedObjects = []
-            renderer.draw(rendererState, timeSinceStart, simulationState.camera.view)
+            renderer.draw(rendererState, time, simulationState.camera.view)
         }
         catch(e)
         {
@@ -63,7 +66,7 @@ var input = {
     {
         var state = {
             mouseDeltaX: 0,
-            mouseDeltaY: 0,
+            mouseDeltaY: 500,
             mouseDown: false
         }
 
@@ -108,25 +111,29 @@ var simulation = {
         state.addedObjects = []
         state.removedObjects = []
 
-        var sunSize = 500
-        var planetSize = 6371
+        var sunSize = 15000
+        var planetSize = 2500
         var sunEnt = state.sun = entity.spawn(state, "sphere", sunSize, function(obj, dt, t) {
-            entity.rotateY(obj, dt*2)
+            //entity.rotateY(obj, dt/1000.0)
         })
         sunEnt.shader = "sun"
         sunEnt.color = [1, 0.9, 0]
 
-        var planetPivot = entity.spawn(state, null, 0, function(obj, dt, t) {
-        })
-
         var planet = state.planet = entity.spawn(state, "sphere", planetSize, function(obj, dt, t) {
         })
         planet.shader = "planet"
-
         planet.color = [0.2, 0.7, 0.1]
-        entity.setParent(planet, planetPivot)
-        entity.translate(planet, [0, -planetSize, -planetSize - sunSize])
+        planet.mass = 100000000
+        entity.translate(planet, [0, -planetSize - sunSize*6, -sunSize])
         entity.rotateY(planet, -50)
+
+        var moon = state.moon = entity.spawn(state, "sphere", planetSize / 2, function(obj, dt, t) {
+
+        })
+        moon.orbitParent = planet
+        moon.velocity = [0, 0, -100]
+        moon.mass = 1000
+        entity.translate(moon, vec3.add(vec3.create(), entity.worldPosition(planet), [planetSize*4, 0, 0]))
 
         function getCoords(latNumber, longNumber)
         {
@@ -163,21 +170,26 @@ var simulation = {
             entity.rotateY(obj, -input.mouseDeltaX/500.0)
             entity.rotateX(obj, -input.mouseDeltaY/500.0)
         })
-        entity.setParent(state.cameraOrbitEntity, state.player)
+        entity.setParent(state.cameraOrbitEntity, state.sun)
 
-        state.camera = entity.spawn(state, null, 0, function(obj, dt, t, input) {
+        function updateCamera(obj)
+        {
             obj.view = mat4.lookAt(obj.view,
                 entity.worldPosition(obj),
                 entity.worldPosition(obj.parent),
                 vec3.subtract(vec3.create(), entity.worldPosition(obj), entity.worldPosition(planet)))
+        }
+
+        state.camera = entity.spawn(state, null, 0, function(obj, dt, t, input) {
+            updateCamera(obj)
         })
 
         entity.translate(state.player, offset)
 
         state.camera.view = mat4.create()
         entity.setParent(state.camera, state.cameraOrbitEntity)
-        entity.translate(state.camera, [0, 1, 1])
-
+        entity.translate(state.camera, [0, 25000, 1])
+        updateCamera(state.camera)
         return state
     },
 
@@ -189,6 +201,23 @@ var simulation = {
 
             if (obj.update)
                 obj.update(obj, dt, t, input)
+
+            if (vec3.length(obj.velocity) != 0)
+            {
+                if (obj.mass != 0 && obj.orbitParent && obj.orbitParent.mass != 0)
+                {
+                    var parent = obj.orbitParent
+                    var v = vec3.subtract(vec3.create(), parent.position, obj.position)
+                    var n = vec3.normalize(vec3.create(), v)
+                    var d = vec3.length(v)
+                    var G = 6.6726*Math.pow(10, -4)
+                    var fDivM = (G * parent.mass * obj.mass) / (d*d)
+                    var fv = vec3.scale(vec3.create(), n, fDivM * dt)
+                    obj.velocity = vec3.add(vec3.create(), obj.velocity, fv)
+                }
+
+                entity.translate(obj, vec3.scale(vec3.create(), obj.velocity, dt))
+            }
         }
     }
 }
@@ -203,6 +232,7 @@ var entity = {
             position: vec3.create(),
             rotation: quat.create(),
             model: mat4.create(),
+            mass: 0,
             color: [1, 1, 1],
             velocity: [0, 0, 0],
             shader: "planet",
@@ -649,7 +679,7 @@ var renderer = {
         state.shaders.sun = renderer.loadShaderProgram(gl, "sun-vs", "sun-fs")
         state.shaders.ship = renderer.loadShaderProgram(gl, "ship-vs", "ship-fs")
         state.shaders.planet = renderer.loadShaderProgram(gl, "planet-vs", "planet-fs")
-        gl.clearColor(0.0, 0.0, 0.0, 1.0)
+        gl.clearColor(0, 0, 0, 1.0)
         gl.enable(gl.DEPTH_TEST)
         return state
     },
@@ -687,7 +717,7 @@ var renderer = {
         gl.viewport(0, 0, state.resolutionX, state.resolutionY)
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
         var projection = mat4.create()
-        mat4.perspective(projection, 45, state.resolutionX / state.resolutionY, 0.5, 20000.0)
+        mat4.perspective(projection, 45, state.resolutionX / state.resolutionY, 0.5, 2000000.0)
 
         function drawObject(object)
         {
@@ -710,7 +740,7 @@ var renderer = {
             gl.uniformMatrix4fv(shader.projectionUniform, false, projection)
             gl.uniformMatrix4fv(shader.modelUniform, false, model)
             gl.uniformMatrix4fv(shader.modelViewUniform, false, modelView)
-            gl.uniform1f(shader.timeUniform, false, time)
+            gl.uniform1f(shader.timeUniform, time)
             gl.drawArrays(gl.TRIANGLES, 0, object.geometry.size)
         }
 
