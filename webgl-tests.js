@@ -1,5 +1,5 @@
 var GEOMETRY_SIZE = 9
-var TIME_SCALE = 5000
+var TIME_SCALE = 1
 
 window.onload = function()
 {
@@ -18,7 +18,7 @@ window.onload = function()
 
         var timeSinceStart = (currentTime - startTime) / 1000.0
         var timeLastFrame = currentTime
-        var time = timeSinceStart * TIME_SCALE
+        var time = (timeSinceStart * TIME_SCALE)
 
         if (dt === 0)
             dt = 1
@@ -169,18 +169,32 @@ var simulation = {
             return [x, y, z]
         }
 
+        var base = entity.spawn(state, "box", 0.7)
+        base.shader = "pad"
         var rocketSize = 0.5
         state.player = entity.spawn(state, "rocket", rocketSize, function(obj, dt, t) {
+            if (t > 1 && obj.started == false)
+            {
+                obj.started = true
+                obj.parent.children = []
+                obj.parent = null
+                obj.orbitParent = planet
+                entity.calculateModel(obj)
+            }
+
+            if (obj.started && t < 10)
+            {
+                vec3.add(obj.velocity, obj.velocity, [0, 1000 * dt, 0])
+            }
         })
+        state.player.mass = 1000
+        state.player.started = false
         state.player.color = [0, 1, 1]
         state.player.shader = "ship"
         entity.setParent(state.player, planet)
 
         var planetNormPos = getCoords(0, 0)
         var offset = vec3.scale(vec3.create(), planetNormPos, planetSize + 0.7)
-        var base = entity.spawn(state, "box", 0.7)
-        base.shader = "pad"
-        entity.setParent(base, planet)
         entity.translate(base, vec3.subtract(vec3.create(), offset, [0, 0.95, 0]))
 
         var sky = entity.spawn(state, "box", 190000)
@@ -245,6 +259,7 @@ var simulation = {
                     var fDivM = (G * parent.mass * obj.mass) / (d*d)
                     var fv = vec3.scale(vec3.create(), n, fDivM * dt)
                     obj.velocity = vec3.add(vec3.create(), obj.velocity, fv)
+                    console.log(obj.velocity)
                 }
 
                 entity.translate(obj, vec3.scale(vec3.create(), obj.velocity, dt))
