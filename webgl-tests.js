@@ -10,16 +10,46 @@ var route = [
         time: 4,
         action: "rotate",
         axis: "z",
+        radsPerSec: 4
+    },
+    {
+        time: 20,
+        action: "stopRotate",
+    },
+    {
+        time: 40,
+        action: "cut"
+    },
+    {
+        time: 500,
+        action: "rotate",
+        axis: "z",
         radsPerSec: 2
     },
     {
-        time: 25,
+        time: 540,
         action: "stopRotate"
     },
     {
-        time: 50,
+        time: 541,
+        action: "thrust"
+    },
+    {
+        time: 547,
         action: "cut"
-    }
+    },/*,
+    {
+        time: 2330,
+        action: "stopRotate"
+    },
+    {
+        time: 2400,
+        action: "thrust"
+    },
+    {
+        time: 2440,
+        action: "cut"
+    },*/
 ]
 
 window.onload = function()
@@ -230,18 +260,13 @@ var simulation = {
                 entity.calculateModel(obj)
             }
 
-            /*if (obj.started && t < obj.startTime + 10)
-            {
-                vec3.add(obj.velocity, obj.velocity, [0, 100 * dt, 0])
-            }
-
             if (obj.started && t > obj.startTime + 1)
             {
                 var playerPosLen = vec3.length(obj.position)
 
                 if (playerPosLen <= (planetSize))
                     TIME_SCALE = 0
-            }*/
+            }
 
             if (obj.thrust)
             {
@@ -263,10 +288,16 @@ var simulation = {
 
             if (obj.started)
             {
+
+                console.log(t - obj.startTime)
+
                 if (route.length == 0)
                     return
 
                 var action = route[0]
+
+
+
 
                 if (t < obj.startTime + action.time)
                     return
@@ -293,7 +324,7 @@ var simulation = {
                 }
             }
         })
-        state.player.mass = 10000
+        state.player.mass = 20000
         state.player.started = false
         state.player.color = [0, 1, 1]
         state.player.shader = "ship"
@@ -317,16 +348,16 @@ var simulation = {
             updateCamera(obj)
         })
 
-        state.camera.up = [0, 1, 0]
-
         state.cameraOrbitEntity = entity.spawn(state, null, 0, function(obj, dt, t, input) {
             if (input.leftDown)
             {
+                entity.rotateX(obj, -input.mouseDeltaY * 0.005)
+                entity.rotateY(obj, -input.mouseDeltaX * 0.005)
                 /*var or = quat.rotationTo(quat.create(), vec3.create(), [-input.mouseDeltaY, -input.mouseDeltaX, 0])
                 quat.multiply(obj.rotation, or, obj.rotation)
                 entity.calculateModel(obj)*/
 
-                obj.view,
+                /*obj.view,
                 entity.worldPosition(obj),
                 entity.worldPosition(obj.parent),
                 vec3.subtract(vec3.create(), entity.worldPosition(obj), entity.worldPosition(planet)))
@@ -338,7 +369,7 @@ var simulation = {
                 
                 quat.multiply(obj.rotation, obj.rotation, qq)
                 quat.calculateW(obj.rotation, obj.rotation)
-                entity.calculateModel(obj)
+                entity.calculateModel(obj)*/
 
                 /*var mm = mat4.clone(obj.model)
                 var mr = mat4.rotate(mm, mm, dt*10, )
