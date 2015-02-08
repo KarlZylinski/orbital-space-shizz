@@ -1,5 +1,5 @@
 var GEOMETRY_SIZE = 9
-var TIME_SCALE = 1
+var TIME_SCALE = 5000
 
 window.onload = function()
 {
@@ -67,11 +67,12 @@ var input = {
         var state = {
             mouseDeltaX: 0,
             mouseDeltaY: 500,
-            mouseDown: false
+            leftDown: false,
+            rightDown: false
         }
 
         document.addEventListener("mousemove", function(e) {
-            if (!state.mouseDown)
+            if (!state.leftDown && !state.rightDown)
                 return
 
             state.mouseDeltaX += e.movementX
@@ -79,17 +80,25 @@ var input = {
         })
 
         document.addEventListener("mousedown", function(e) {
-            if (e.button != 0)
-                return
-
-            state.mouseDown = true
+            if (e.button == 0)
+                state.leftDown = true
+            
+            if (e.button == 2)
+            {
+                state.rightDown = true
+                return false
+            }
         })
 
         document.addEventListener("mouseup", function(e) {
-            if (e.button != 0)
-                return
-
-            state.mouseDown = false
+            if (e.button == 0)
+                state.leftDown = false
+            
+            if (e.button == 2)
+            {
+                state.rightDown = false
+                return false
+            }
         })
 
 
@@ -111,23 +120,30 @@ var simulation = {
         state.addedObjects = []
         state.removedObjects = []
 
+        var origin = entity.spawn(state, null, 0, function(obj, dt, t) {
+            entity.rotateY(obj, dt*0.001)
+            entity.rotateZ(obj, dt*0.001)
+        })
         var sunSize = 15000
         var planetSize = 2500
         var sunEnt = state.sun = entity.spawn(state, "sphere", sunSize, function(obj, dt, t) {
             //entity.rotateY(obj, dt/1000.0)
         })
+        entity.setParent(sunEnt, origin)
+        entity.translate(sunEnt, [0, sunSize*4, -sunSize*4])
         sunEnt.shader = "sun"
         sunEnt.color = [1, 0.9, 0]
 
         var planet = state.planet = entity.spawn(state, "sphere", planetSize, function(obj, dt, t) {
+            //entity.rotateY(obj, dt*0.001)
         })
         planet.shader = "planet"
-        planet.color = [0.2, 0.7, 0.1]
+        planet.color = [0.3, 0.8, 0.2]
         planet.mass = 100000000
-        entity.translate(planet, [0, -planetSize - sunSize*6, -sunSize])
         entity.rotateY(planet, -50)
 
         var moon = state.moon = entity.spawn(state, "sphere", planetSize / 2, function(obj, dt, t) {
+            entity.rotateY(obj, dt*0.1)
 
         })
         moon.orbitParent = planet
@@ -153,7 +169,7 @@ var simulation = {
             return [x, y, z]
         }
 
-        var rocketSize = 0.08
+        var rocketSize = 0.5
         state.player = entity.spawn(state, "rocket", rocketSize, function(obj, dt, t) {
         })
         state.player.color = [0, 1, 1]
@@ -161,16 +177,14 @@ var simulation = {
         entity.setParent(state.player, planet)
 
         var planetNormPos = getCoords(0, 0)
-        var offset = vec3.scale(vec3.create(), planetNormPos, planetSize + 0.2)
+        var offset = vec3.scale(vec3.create(), planetNormPos, planetSize + 0.7)
         var base = entity.spawn(state, "box", 0.7)
+        base.shader = "pad"
         entity.setParent(base, planet)
-        entity.translate(base, vec3.subtract(vec3.create(), offset, [0, 0.45, 0]))
+        entity.translate(base, vec3.subtract(vec3.create(), offset, [0, 0.95, 0]))
 
-        state.cameraOrbitEntity = entity.spawn(state, null, 0, function(obj, dt, t, input) {
-            entity.rotateY(obj, -input.mouseDeltaX/500.0)
-            entity.rotateX(obj, -input.mouseDeltaY/500.0)
-        })
-        entity.setParent(state.cameraOrbitEntity, state.sun)
+        var sky = entity.spawn(state, "box", 190000)
+        sky.shader = "sky"
 
         function updateCamera(obj)
         {
@@ -184,11 +198,28 @@ var simulation = {
             updateCamera(obj)
         })
 
+        state.cameraOrbitEntity = entity.spawn(state, null, 0, function(obj, dt, t, input) {
+            if (input.leftDown)
+            {
+                entity.rotateX(obj, -input.mouseDeltaY/500)
+                entity.rotateY(obj, -input.mouseDeltaX/500)
+            }
+
+            if (input.rightDown)
+            {
+                console.log(input.mouseDeltaY)
+                var back = vec3.normalize(vec3.create(), vec3.subtract(vec3.create(), entity.worldPosition(state.camera), entity.worldPosition(planet)))
+                entity.translate(state.camera, vec3.scale(vec3.create(), back, input.mouseDeltaY/50.0))
+            }
+        })
+        entity.setParent(state.cameraOrbitEntity, state.player)
+
+
         entity.translate(state.player, offset)
 
         state.camera.view = mat4.create()
         entity.setParent(state.camera, state.cameraOrbitEntity)
-        entity.translate(state.camera, [0, 25000, 1])
+        entity.translate(state.camera, [0, 1, 1])
         updateCamera(state.camera)
         return state
     },
@@ -207,7 +238,7 @@ var simulation = {
                 if (obj.mass != 0 && obj.orbitParent && obj.orbitParent.mass != 0)
                 {
                     var parent = obj.orbitParent
-                    var v = vec3.subtract(vec3.create(), parent.position, obj.position)
+                    var v = vec3.subtract(vec3.create(), entity.worldPosition(parent), entity.worldPosition(obj))
                     var n = vec3.normalize(vec3.create(), v)
                     var d = vec3.length(v)
                     var G = 6.6726*Math.pow(10, -4)
@@ -276,6 +307,12 @@ var entity = {
     translate: function(e, vec)
     {
         vec3.add(e.position, e.position, vec)
+        entity.calculateModel(e)
+    },
+
+    rotateTo: function(e, a, b)
+    {
+        quat.rotationTo(e.rotation, a, b)
         entity.calculateModel(e)
     },
 
@@ -399,33 +436,33 @@ var renderer = {
                         vertices: [
                                 // Back
                                 [h, h, -h],
-                                [h, 0, -h],
-                                [-h, 0, -h],
-                                [-h, 0, -h],
+                                [h, -h, -h],
+                                [-h, -h, -h],
+                                [-h, -h, -h],
                                 [-h, h, -h],
                                 [h, h, -h],
 
                                 // Front
                                 [h, h, h],
-                                [h, 0, h],
-                                [-h, 0, h],
-                                [-h, 0, h],
+                                [h, -h, h],
+                                [-h,-h, h],
+                                [-h,-h, h],
                                 [-h, h, h],
                                 [h, h, h],
 
                                  // Right
                                 [h, h, h],
-                                [h, 0, h],
-                                [h, 0, -h],
-                                [h, 0, -h],
+                                [h, -h, h],
+                                [h, -h, -h],
+                                [h, -h, -h],
                                 [h, h, -h],
                                 [h, h, h],
 
                                  // Left
                                 [-h, h, h],
-                                [-h, 0, h],
-                                [-h, 0, -h],
-                                [-h, 0, -h],
+                                [-h, -h, h],
+                                [-h, -h, -h],
+                                [-h, -h, -h],
                                 [-h, h, -h],
                                 [-h, h, h],
 
@@ -435,7 +472,15 @@ var renderer = {
                                 [-h, h, h],
                                 [h, h, -h],
                                 [h, h, h],
-                                [-h, h, h]
+                                [-h, h, h],
+
+                                 // Bottom
+                                [-h, -h, -h],
+                                [h, -h, -h],
+                                [-h, -h, h],
+                                [h, -h, -h],
+                                [h, -h, h],
+                                [-h, -h, h]
                             ],
                         normals: [
                                 [0, 0, -1],
@@ -467,7 +512,13 @@ var renderer = {
                                 [0, 1, 0],
                                 [0, 1, 0],
                                 [0, 1, 0],
-                                [0, 1, 0]
+                                [0, 1, 0],
+                                [0, -1, 0],
+                                [0, -1, 0],
+                                [0, -1, 0],
+                                [0, -1, 0],
+                                [0, -1, 0],
+                                [0, -1, 0]
                             ]
                         }
 
@@ -676,6 +727,8 @@ var renderer = {
         state.gl = gl
         var ext = initWebGLEW(gl)
         state.shaders = {}
+        state.shaders.sky = renderer.loadShaderProgram(gl, "sky-vs", "sky-fs")
+        state.shaders.pad = renderer.loadShaderProgram(gl, "pad-vs", "pad-fs")
         state.shaders.sun = renderer.loadShaderProgram(gl, "sun-vs", "sun-fs")
         state.shaders.ship = renderer.loadShaderProgram(gl, "ship-vs", "ship-fs")
         state.shaders.planet = renderer.loadShaderProgram(gl, "planet-vs", "planet-fs")
