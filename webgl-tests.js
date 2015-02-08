@@ -1,5 +1,26 @@
 var GEOMETRY_SIZE = 9
-var TIME_SCALE = 1
+var TIME_SCALE = 100
+
+var route = [
+    {
+        time: 2,
+        action: "thrust"
+    },
+    {
+        time: 4,
+        action: "rotate",
+        axis: "z",
+        radsPerSec: 2
+    },
+    {
+        time: 25,
+        action: "stopRotate"
+    },
+    {
+        time: 50,
+        action: "cut"
+    }
+]
 
 window.onload = function()
 {
@@ -18,7 +39,7 @@ window.onload = function()
 
         var timeSinceStart = (currentTime - startTime) / 1000.0
         var timeLastFrame = currentTime
-        var time = (timeSinceStart * TIME_SCALE)
+        var time = timeSinceStart * TIME_SCALE
 
         if (dt === 0)
             dt = 1
@@ -26,8 +47,6 @@ window.onload = function()
         dt = dt / 1000.0
         dt *= TIME_SCALE
 
-        try
-        {
             var inputThisFrame = clone(inputState)
             input.reset(inputState)
             simulation.simulate(simulationState, inputThisFrame, time, dt)
@@ -37,12 +56,7 @@ window.onload = function()
             simulationState.addedObjects = []
             simulationState.removedObjects = []
             renderer.draw(rendererState, time, simulationState.camera.view)
-        }
-        catch(e)
-        {
-            console.error(e)
-            clearInterval(interval)
-        }
+
     }, 1000/30)
 }
 
@@ -68,7 +82,10 @@ var input = {
             mouseDeltaX: 0,
             mouseDeltaY: 500,
             leftDown: false,
-            rightDown: false
+            rightDown: false,
+            pressedKeys: {},
+            releasedKeys: {},
+            keysHeld: {}
         }
 
         document.addEventListener("mousemove", function(e) {
@@ -101,6 +118,33 @@ var input = {
             }
         })
 
+        document.addEventListener('keydown', function(e) {
+            if(e.keyCode == 32)
+            {
+                state.keysHeld["space"] = true
+                state.pressedKeys["space"] = true
+            }
+
+            if (e.keyCode == 38)
+            {
+                state.keysHeld["up"] = true
+                state.pressedKeys["up"] = true
+            }
+        });
+
+        document.addEventListener('keyup', function(e) {
+            if(e.keyCode == 32)
+            {
+                state.keysHeld["space"] = false
+                state.pressedKeys["space"] = false
+            }
+
+            if (e.keyCode == 38)
+            {
+                state.keysHeld["up"] = false
+                state.pressedKeys["up"] = false
+            }
+        });
 
         return state
     },
@@ -109,6 +153,8 @@ var input = {
     {
         state.mouseDeltaX = 0
         state.mouseDeltaY = 0
+        state.pressedKeys = {}
+        state.releasedKeys = {}
     }
 }
 
@@ -140,7 +186,6 @@ var simulation = {
         planet.shader = "planet"
         planet.color = [0.3, 0.8, 0.2]
         planet.mass = 100000000
-        entity.rotateY(planet, -50)
 
         var moon = state.moon = entity.spawn(state, "sphere", planetSize / 2, function(obj, dt, t) {
             entity.rotateY(obj, dt*0.1)
@@ -172,26 +217,86 @@ var simulation = {
         var base = entity.spawn(state, "box", 0.7)
         base.shader = "pad"
         var rocketSize = 0.5
-        state.player = entity.spawn(state, "rocket", rocketSize, function(obj, dt, t) {
-            if (t > 1 && obj.started == false)
+        state.player = entity.spawn(state, "rocket", rocketSize, function(obj, dt, t, input) {
+            if (input.pressedKeys["space"] && obj.started == false)
             {
                 obj.started = true
-                obj.parent.children = []
-                obj.parent = null
+                obj.thrust = false
+                obj.rotate = false
+                obj.rotateAxis = "y"
+                obj.rotateRadsPerSec = 0
+                obj.startTime = t
                 obj.orbitParent = planet
                 entity.calculateModel(obj)
             }
 
-            if (obj.started && t < 10)
+            /*if (obj.started && t < obj.startTime + 10)
             {
-                vec3.add(obj.velocity, obj.velocity, [0, 1000 * dt, 0])
+                vec3.add(obj.velocity, obj.velocity, [0, 100 * dt, 0])
+            }
+
+            if (obj.started && t > obj.startTime + 1)
+            {
+                var playerPosLen = vec3.length(obj.position)
+
+                if (playerPosLen <= (planetSize))
+                    TIME_SCALE = 0
+            }*/
+
+            if (obj.thrust)
+            {
+                var rMat = mat4.fromQuat(mat4.create(), obj.rotation)
+                vec3.add(obj.velocity, obj.velocity, vec3.transformMat4(vec3.create(), [0, 1000 * dt, 0], rMat))
+            }
+
+            if (obj.rotate)
+            {
+                if (obj.rotateAxis == "x")
+                    entity.rotateX(obj, obj.rotateRadsPerSec * dt)
+
+                if (obj.rotateAxis == "y")
+                    entity.rotateY(obj, obj.rotateRadsPerSec * dt)
+
+                if (obj.rotateAxis == "z")
+                    entity.rotateZ(obj, obj.rotateRadsPerSec * dt)
+            }
+
+            if (obj.started)
+            {
+                if (route.length == 0)
+                    return
+
+                var action = route[0]
+
+                if (t < obj.startTime + action.time)
+                    return
+
+                route.splice(0, 1)
+
+                var a = action.action
+                if (a == "thrust")
+                    obj.thrust = true
+
+                if (a == "cut")
+                    obj.thrust = false
+
+                if (a == "rotate")
+                {
+                    obj.rotate = true
+                    obj.rotateAxis = action.axis
+                    obj.rotateRadsPerSec = action.radsPerSec
+                }
+
+                if (a == "stopRotate")
+                {
+                    obj.rotate = false
+                }
             }
         })
-        state.player.mass = 1000
+        state.player.mass = 10000
         state.player.started = false
         state.player.color = [0, 1, 1]
         state.player.shader = "ship"
-        entity.setParent(state.player, planet)
 
         var planetNormPos = getCoords(0, 0)
         var offset = vec3.scale(vec3.create(), planetNormPos, planetSize + 0.7)
@@ -212,16 +317,41 @@ var simulation = {
             updateCamera(obj)
         })
 
+        state.camera.up = [0, 1, 0]
+
         state.cameraOrbitEntity = entity.spawn(state, null, 0, function(obj, dt, t, input) {
             if (input.leftDown)
             {
-                entity.rotateX(obj, -input.mouseDeltaY/500)
-                entity.rotateY(obj, -input.mouseDeltaX/500)
+                /*var or = quat.rotationTo(quat.create(), vec3.create(), [-input.mouseDeltaY, -input.mouseDeltaX, 0])
+                quat.multiply(obj.rotation, or, obj.rotation)
+                entity.calculateModel(obj)*/
+
+                obj.view,
+                entity.worldPosition(obj),
+                entity.worldPosition(obj.parent),
+                vec3.subtract(vec3.create(), entity.worldPosition(obj), entity.worldPosition(planet)))
+
+                var qq = quat.create()
+                quat.rotateX(qq, qq, -input.mouseDeltaY * 0.005)
+                quat.rotateY(qq, qq, -input.mouseDeltaX * 0.005)
+                quat.calculateW(qq, qq)
+                
+                quat.multiply(obj.rotation, obj.rotation, qq)
+                quat.calculateW(obj.rotation, obj.rotation)
+                entity.calculateModel(obj)
+
+                /*var mm = mat4.clone(obj.model)
+                var mr = mat4.rotate(mm, mm, dt*10, )
+                if (mr != null)
+                {
+                    var m3 = mat3.fromMat4(mat3.create(), mr)
+                    quat.fromMat3(obj.rotation, m3)
+                    entity.calculateModel(obj)
+                }*/
             }
 
             if (input.rightDown)
             {
-                console.log(input.mouseDeltaY)
                 var back = vec3.normalize(vec3.create(), vec3.subtract(vec3.create(), entity.worldPosition(state.camera), entity.worldPosition(planet)))
                 entity.translate(state.camera, vec3.scale(vec3.create(), back, input.mouseDeltaY/50.0))
             }
@@ -240,6 +370,16 @@ var simulation = {
 
     simulate: function(state, input, t, dt)
     {
+        if (input.pressedKeys["up"])
+            TIME_SCALE *= 2
+
+        if (input.pressedKeys["down"])
+        {
+            TIME_SCALE /= 2
+            if (TIME_SCALE < 1.0)
+                TIME_SCALE = 1.0
+        }
+
         for (var i = 0; i < state.world.length; ++i)
         {
             var obj = state.world[i]
@@ -259,7 +399,6 @@ var simulation = {
                     var fDivM = (G * parent.mass * obj.mass) / (d*d)
                     var fv = vec3.scale(vec3.create(), n, fDivM * dt)
                     obj.velocity = vec3.add(vec3.create(), obj.velocity, fv)
-                    console.log(obj.velocity)
                 }
 
                 entity.translate(obj, vec3.scale(vec3.create(), obj.velocity, dt))
