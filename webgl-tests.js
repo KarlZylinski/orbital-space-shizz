@@ -1,41 +1,41 @@
 var GEOMETRY_SIZE = 9
-var TIME_SCALE = 100
+var TIME_SCALE = 1
 
 var route = [
     {
-        time: 2,
+        time: 12,
         action: "thrust"
     },
     {
-        time: 4,
+        time: 14,
         action: "rotate",
         axis: "z",
         radsPerSec: 4
     },
     {
-        time: 20,
+        time: 30,
         action: "stopRotate",
     },
     {
-        time: 40,
+        time: 50,
         action: "cut"
     },
     {
-        time: 500,
+        time: 510,
         action: "rotate",
         axis: "z",
         radsPerSec: 2
     },
     {
-        time: 540,
+        time: 550,
         action: "stopRotate"
     },
     {
-        time: 541,
+        time: 551,
         action: "thrust"
     },
     {
-        time: 547,
+        time: 557,
         action: "cut"
     },/*,
     {
@@ -59,6 +59,7 @@ window.onload = function()
     var inputState = input.setup()
     var startTime = new Date()
     var timeLastFrame = null
+    TIME_SCALE = parseFloat(window.location.search.replace("?", "")) || 1
 
     var interval = setInterval(function() {
         var currentTime = new Date()
@@ -209,6 +210,13 @@ var simulation = {
         entity.translate(sunEnt, [0, sunSize*4, -sunSize*4])
         sunEnt.shader = "sun"
         sunEnt.color = [1, 0.9, 0]
+
+
+        var sunHalo = entity.spawn(state, "sphere", sunSize + sunSize / 4, function(obj, dt, t) {
+            //entity.rotateY(obj, dt/1000.0)
+        })
+        entity.setParent(sunHalo, sunEnt)
+        sunHalo.shader = "halo"
 
         var planet = state.planet = entity.spawn(state, "sphere", planetSize, function(obj, dt, t) {
             //entity.rotateY(obj, dt*0.001)
@@ -912,6 +920,7 @@ var renderer = {
         state.gl = gl
         var ext = initWebGLEW(gl)
         state.shaders = {}
+        state.shaders.halo = renderer.loadShaderProgram(gl, "halo-vs", "halo-fs")
         state.shaders.sky = renderer.loadShaderProgram(gl, "sky-vs", "sky-fs")
         state.shaders.pad = renderer.loadShaderProgram(gl, "pad-vs", "pad-fs")
         state.shaders.sun = renderer.loadShaderProgram(gl, "sun-vs", "sun-fs")
@@ -919,6 +928,8 @@ var renderer = {
         state.shaders.planet = renderer.loadShaderProgram(gl, "planet-vs", "planet-fs")
         gl.clearColor(0, 0, 0, 1.0)
         gl.enable(gl.DEPTH_TEST)
+        gl.enable(gl.BLEND)
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
         return state
     },
 

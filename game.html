@@ -635,6 +635,45 @@
             }
         </script>
 
+        <script id="halo-vs" type="x-shader/x-vertex">
+            attribute vec3 position;
+            attribute vec3 normal;
+            attribute vec3 color;
+            uniform mat4 modelInverseTranspose;
+            uniform mat4 model;
+            uniform mat4 modelView;
+            uniform mat4 projection;
+            uniform float time;
+            varying vec3 vWorldPos;
+            varying vec3 vLocalPos;
+            varying vec3 vNormal;
+            varying vec3 vColor;
+
+            void main(void) {
+                vColor = color;
+                vNormal = (vec4(normal, 1) * modelInverseTranspose).xyz;
+                vec4 position4 = model * vec4(position, 1.0);
+                vWorldPos = vec3(position4);
+                vLocalPos = position;
+                gl_Position = projection * modelView * vec4(position, 1.0);
+            }
+        </script>
+
+        <script id="halo-fs" type="x-shader/x-fragment">
+            precision highp float;
+            varying vec3 vWorldPos;
+            varying vec3 vLocalPos;
+            varying vec3 vNormal;
+            varying vec3 vColor;
+            uniform vec3 sunPosition;
+            uniform float time;
+
+            void main(void) {
+                float h = 1.0-length(sunPosition - vec3(vWorldPos))/(15000.0 + 15000.0 * 4.5);
+                gl_FragColor = vec4(1.0, 0.7, 0.0, h);
+            }
+        </script>
+
         <script type="text/javascript" src="webgl-debug.js"></script>
         <script type="text/javascript" src="gl-matrix.js"></script>
         <script type="text/javascript" src="webgl-tests.js"></script>
