@@ -302,6 +302,45 @@
             }
         </script>
 
+
+        <script id="particle-vs" type="x-shader/x-vertex">
+            attribute vec3 position;
+            attribute vec3 normal;
+            attribute vec3 color;
+            uniform mat4 modelInverseTranspose;
+            uniform mat4 model;
+            uniform mat4 modelView;
+            uniform mat4 projection;
+            uniform float time;
+            varying vec3 vWorldPos;
+            varying vec3 vLocalPos;
+            varying vec3 vNormal;
+            varying vec3 vColor;
+
+            void main(void) {
+                vColor = color;
+                vNormal = (vec4(normal, 1) * modelInverseTranspose).xyz;
+                vec4 position4 = model * vec4(position, 1.0);
+                vWorldPos = vec3(position4);
+                vLocalPos = position;
+                gl_Position = projection * modelView * vec4(position, 1.0);
+            }
+        </script>
+
+        <script id="particle-fs" type="x-shader/x-fragment">
+            precision highp float;
+            varying vec3 vWorldPos;
+            varying vec3 vLocalPos;
+            varying vec3 vNormal;
+            varying vec3 vColor;
+            uniform vec3 sunPosition;
+            uniform float time;
+
+            void main(void) {
+                gl_FragColor = vec4(1.0, 0.9, 0.0, 1.0);
+            }
+        </script>
+
         <script id="ship-vs" type="x-shader/x-vertex">
             attribute vec3 position;
             attribute vec3 normal;
@@ -440,7 +479,7 @@
             void main(void) {
                 vec3 nSunPos = normalize(-sunPosition);
                 vec3 nNormal = normalize(vNormal);
-                vec3 special = normalize(vLocalPos);
+                vec3 special = max(vec3(0.3, 0.0, 0.0), normalize(vLocalPos));
                 float light = dot(nSunPos, nNormal) * 2.0;
                 float ambient = max(0.3, 0.3 - light);
                 gl_FragColor = vec4(special * ambient + special * light, 1);

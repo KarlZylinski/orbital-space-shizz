@@ -267,6 +267,8 @@ var simulation = {
                 obj.rotateRadsPerSec = 0
                 obj.startTime = t
                 obj.orbitParent = planet
+                obj.thrusterParticles = []
+                obj.lastThrusterParticleCreationTime = 0
                 entity.calculateModel(obj)
             }
 
@@ -282,6 +284,63 @@ var simulation = {
             {
                 var rMat = mat4.fromQuat(mat4.create(), obj.rotation)
                 vec3.add(obj.velocity, obj.velocity, vec3.transformMat4(vec3.create(), [0, 1000 * dt, 0], rMat))
+
+                function createParticle()
+                {
+                    var rX = Math.random()*Math.PI*2
+                    var rY = Math.random()*Math.PI*2
+                    var rZ = Math.random()*Math.PI*2
+                    var mX = Math.random()*rocketSize*0.4 - rocketSize*0.2
+                    var mZ = Math.random()*rocketSize*0.4 - rocketSize*0.2
+                    var particle = entity.spawn(state, "triangle", rocketSize*0.25, function(obj, dt, t)
+                    {
+                        entity.rotateX(obj, dt*500)
+                        entity.rotateY(obj, dt*500)
+                        entity.rotateZ(obj, dt*500)
+                        entity.translate(particle, [mX * dt * 200, -dt*100, mZ * dt * 200])
+                    })
+
+                    entity.rotateX(particle, rX)
+                    entity.rotateY(particle, rY)
+                    entity.rotateZ(particle, rZ)
+                    particle.shader = "particle"
+                    entity.setParent(particle, obj.particleSpawnPoint)
+                    return particle
+                }
+
+                if (t > obj.lastThrusterParticleCreationTime + 0.1)
+                {
+                    var numToCreate = (t - obj.lastThrusterParticleCreationTime) / 0.1
+
+                    if (numToCreate < 1 || numToCreate > 5)
+                        numToCreate = 1
+
+                    for (var i = 0; i < numToCreate; ++i)
+                    {
+                        obj.thrusterParticles.push({
+                            object: createParticle(),
+                            createdAt: t
+                        })
+                    }
+                    
+                    obj.lastThrusterParticleCreationTime = t
+                }
+            }
+
+            if (obj.thrusterParticles)
+            {
+                for (var i = 0; i < obj.thrusterParticles.length;)
+                {
+                    var p = obj.thrusterParticles[i]
+
+                    if (t > p.createdAt + 0.5)
+                    {
+                        entity.despawn(state, p.object)
+                        obj.thrusterParticles.splice(i, 1)
+                    }
+                    else
+                        ++i
+                }
             }
 
             if (obj.rotate)
@@ -298,16 +357,10 @@ var simulation = {
 
             if (obj.started)
             {
-
-                console.log(t - obj.startTime)
-
                 if (route.length == 0)
                     return
 
                 var action = route[0]
-
-
-
 
                 if (t < obj.startTime + action.time)
                     return
@@ -334,6 +387,9 @@ var simulation = {
                 }
             }
         })
+        state.player.particleSpawnPoint = entity.spawn(state, null, 0)
+        entity.translate(state.player.particleSpawnPoint, [0, -(rocketSize + rocketSize * 0.25), 0])
+        entity.setParent(state.player.particleSpawnPoint, state.player)
         state.player.mass = 20000
         state.player.started = false
         state.player.color = [0, 1, 1]
@@ -398,13 +454,10 @@ var simulation = {
             }
         })
         entity.setParent(state.cameraOrbitEntity, state.player)
-
-
         entity.translate(state.player, offset)
-
         state.camera.view = mat4.create()
         entity.setParent(state.camera, state.cameraOrbitEntity)
-        entity.translate(state.camera, [0, 1, 1.0])
+        entity.translate(state.camera, [0, 1, 2.0])
         updateCamera(state.camera)
         return state
     },
@@ -448,10 +501,13 @@ var simulation = {
     }
 }
 
+var entityIdCounter = 0
+
 var entity = {
     spawn: function(simulationState, type, size, update)
     {
         var e = {
+            id: entityIdCounter++,
             type: type,
             size: size,
             children: [],
@@ -469,6 +525,27 @@ var entity = {
         simulationState.addedObjects.push(e)
         entity.calculateModel(e)
         return e
+    },
+
+    despawn: function(simulationState, e)
+    {
+        var index = -1
+        var world = simulationState.world
+
+        for (var i = 0; i < simulationState.world.length; ++i)
+        {
+            if (world[i].id == e.id)
+            {
+                index = i
+                break
+            }
+        }
+
+        if (index == -1)
+            return
+
+        world.splice(index, 1)
+        simulationState.removedObjects.push(e)
     },
 
     calculateModel: function(e)
@@ -926,6 +1003,7 @@ var renderer = {
         state.shaders.sky = renderer.loadShaderProgram(gl, "sky-vs", "sky-fs")
         state.shaders.pad = renderer.loadShaderProgram(gl, "pad-vs", "pad-fs")
         state.shaders.sun = renderer.loadShaderProgram(gl, "sun-vs", "sun-fs")
+        state.shaders.particle = renderer.loadShaderProgram(gl, "particle-vs", "particle-fs")
         state.shaders.ship = renderer.loadShaderProgram(gl, "ship-vs", "ship-fs")
         state.shaders.planet = renderer.loadShaderProgram(gl, "planet-vs", "planet-fs")
         gl.clearColor(0, 0, 0, 1.0)
@@ -951,6 +1029,8 @@ var renderer = {
 
     destroyRemovedObjects: function(state, removedObjects)
     {
+        var deletedIds = []
+
         for (var i = 0; i < removedObjects.length; ++i)
         {
             var obj = removedObjects[i]
@@ -958,7 +1038,32 @@ var renderer = {
             if (!obj.type)
                 continue
 
-            gl.deleteBuffer(obj.geometry.handle)
+            state.gl.deleteBuffer(obj.geometry.handle)
+            deletedIds.push(obj.id)
+        }
+
+        if (deletedIds.length == 0)
+            return
+
+        for (var i = 0; i < state.world.length;)
+        {
+            var obj = state.world[i]
+
+            function matches()
+            {
+                for (var j = 0; j < deletedIds.length; ++j)
+                {
+                    if (obj.id == deletedIds[j])
+                        return true
+                }
+
+                return false
+            }
+
+            if (matches())
+                state.world.splice(i, 1)
+            else
+                ++i
         }
     },
 
