@@ -1,3 +1,5 @@
+// Space Orbital Shizz by Karl Zylinski. Music by Karl Flodin.
+
 var GEOMETRY_SIZE = 9
 var TIME_SCALE = 1
 
@@ -402,14 +404,14 @@ var simulation = {
 
         state.camera.view = mat4.create()
         entity.setParent(state.camera, state.cameraOrbitEntity)
-        entity.translate(state.camera, [0, 1, 1])
+        entity.translate(state.camera, [0, 1, 1.0])
         updateCamera(state.camera)
         return state
     },
 
     simulate: function(state, input, t, dt)
     {
-        if (input.pressedKeys["up"])
+        /*if (input.pressedKeys["up"])
             TIME_SCALE *= 2
 
         if (input.pressedKeys["down"])
@@ -417,7 +419,7 @@ var simulation = {
             TIME_SCALE /= 2
             if (TIME_SCALE < 1.0)
                 TIME_SCALE = 1.0
-        }
+        }*/
 
         for (var i = 0; i < state.world.length; ++i)
         {
