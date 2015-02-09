@@ -61,7 +61,7 @@ window.onload = function()
     var inputState = input.setup()
     var startTime = new Date()
     var timeLastFrame = null
-    TIME_SCALE = parseFloat(window.location.search.replace("?", "")) || 1
+    TIME_SCALE = parseFloat(window.location.search.replace("?", "")) || 100
 
     var interval = setInterval(function() {
         var currentTime = new Date()
@@ -112,8 +112,10 @@ var input = {
     setup: function()
     {
         var state = {
+            mousePosX: -1,
+            mousePosY: -1,
             mouseDeltaX: 0,
-            mouseDeltaY: 500,
+            mouseDeltaY: 0,
             leftDown: false,
             rightDown: false,
             pressedKeys: {},
@@ -122,11 +124,19 @@ var input = {
         }
 
         document.addEventListener("mousemove", function(e) {
+            var lastX = state.mousePosX
+            var lastY = state.mousePosY
+            state.mousePosX = e.pageX
+            state.mousePosY = e.pageY
+
             if (!state.leftDown && !state.rightDown)
                 return
 
-            state.mouseDeltaX += e.movementX
-            state.mouseDeltaY += e.movementY
+            if (lastX != -1)
+                state.mouseDeltaX += e.pageX - lastX
+
+            if (lastY != -1)
+                state.mouseDeltaY += e.pageY - lastY
         })
 
         document.addEventListener("mousedown", function(e) {
