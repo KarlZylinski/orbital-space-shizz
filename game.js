@@ -91,6 +91,7 @@ window.onload = function()
             input.reset(inputState)
             simulation.simulate(simulationState, inputThisFrame, time, dt, dtNonScaled)
             rendererState.sunPos = entity.worldPosition(simulationState.sun)
+            rendererState.playerPos = entity.worldPosition(simulationState.player)
             renderer.createAddedObjects(rendererState, simulationState.addedObjects)
             renderer.destroyRemovedObjects(rendererState, simulationState.removedObjects)
             simulationState.addedObjects = []
@@ -304,13 +305,14 @@ var simulation = {
                     var rZ = Math.random()*Math.PI*2
                     var mX = Math.random()*rocketSize*0.4 - rocketSize*0.2
                     var mZ = Math.random()*rocketSize*0.4 - rocketSize*0.2
-                    
+
                     var particle = entity.spawn(state, "triangle", rocketSize*0.25, function(obj, dt, t)
                     {
                         entity.rotateX(obj, dt*500)
                         entity.rotateY(obj, dt*500)
                         entity.rotateZ(obj, dt*500)
-                        entity.translate(particle, [mX * dt * 200, -dt*100, mZ * dt * 200])
+                        var scale = TIME_SCALE == 1.0 ? 1.0 : TIME_SCALE / 2.0
+                        entity.translate(particle, [mX * dt * 200 / scale, -dt*100/scale, mZ * dt * 200 / scale])
                     })
 
                     entity.rotateX(particle, rX)
@@ -1074,6 +1076,10 @@ var renderer = {
             gl.uniform3fv(shader.sunPositionUniform, vec3.subtract(vec3.create(), entity.worldPosition(object), state.sunPos))
             gl.uniformMatrix4fv(shader.modelInverseTransposeUniform, false, modelInverseTranspose)
             gl.uniformMatrix4fv(shader.projectionUniform, false, projection)
+            
+            if (shader.playerPositionUniform != 0)
+                gl.uniform3fv(shader.playerPositionUniform, state.playerPos)
+
             gl.uniformMatrix4fv(shader.modelUniform, false, model)
             gl.uniformMatrix4fv(shader.modelViewUniform, false, modelView)
             gl.uniform1f(shader.timeUniform, time)
@@ -1126,6 +1132,7 @@ var renderer = {
         shaderProgram.sunPositionUniform = gl.getUniformLocation(shaderProgram, "sunPosition")
         shaderProgram.modelInverseTransposeUniform = gl.getUniformLocation(shaderProgram, "modelInverseTranspose")
         shaderProgram.projectionUniform = gl.getUniformLocation(shaderProgram, "projection")
+        shaderProgram.playerPositionUniform = gl.getUniformLocation(shaderProgram, "playerPos")
         shaderProgram.modelUniform = gl.getUniformLocation(shaderProgram, "model")
         shaderProgram.modelViewUniform = gl.getUniformLocation(shaderProgram, "modelView")
         shaderProgram.timeUniform = gl.getUniformLocation(shaderProgram, "time")
