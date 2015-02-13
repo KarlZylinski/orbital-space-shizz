@@ -709,7 +709,7 @@
             uniform float time;
 
             void main(void) {
-                float h = 1.0-length(sunPosition - vec3(vWorldPos))/(15000.0 + 15000.0 * 4.5);
+                float h = clamp(1.0-length(sunPosition - vec3(vWorldPos))/(15000.0 + 15000.0 * 4.5), 0.0, 1.0);
                 gl_FragColor = vec4(1.0, 0.7, 0.0, h);
             }
         </script>
