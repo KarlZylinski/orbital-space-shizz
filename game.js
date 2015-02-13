@@ -973,7 +973,7 @@ var renderer = {
         canvas.width = window.innerWidth
         canvas.height = window.innerHeight
         document.body.appendChild(canvas)
-        var gl = WebGLDebugUtils.makeDebugContext(canvas.getContext("experimental-webgl"))
+        var gl = canvas.getContext("experimental-webgl")
         state.resolutionX = canvas.width
         state.resolutionY = canvas.height
         state.world = []
