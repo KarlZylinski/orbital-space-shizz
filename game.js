@@ -2,6 +2,7 @@
 
 var GEOMETRY_SIZE = 9
 var TIME_SCALE = 1
+var HIDDEN_SINCE = null
 
 var route = [
     {
@@ -9,98 +10,74 @@ var route = [
         action: "thrust"
     },
     {
-        time: 4,
+        time: 50,
         action: "rotate",
         axis: "z",
-        radsPerSec: 4
+        radsPerSec: 0.5
     },
     {
-        time: 20,
+        time: 53,
         action: "stopRotate",
     },
     {
-        time: 40,
+        time: 120,
         action: "cut"
-    },
-    {
-        time: 500,
-        action: "rotate",
-        axis: "z",
-        radsPerSec: 2
-    },
-    {
-        time: 540,
-        action: "stopRotate"
-    },
-    {
-        time: 541,
-        action: "thrust"
-    },
-    {
-        time: 547,
-        action: "cut"
-    },/*,
-    {
-        time: 2330,
-        action: "stopRotate"
-    },
-    {
-        time: 2400,
-        action: "thrust"
-    },
-    {
-        time: 2440,
-        action: "cut"
-    },*/
+    }
 ]
 
 IS_IOS = (navigator.userAgent.match(/(iPad|iPhone|iPod)/g) ? true : false);
+
+document.addEventListener("visibilitychange", function() {
+    if (document.hidden)
+        HIDDEN_SINCE = new Date()
+}, false);
 
 window.onload = function()
 {
     var simulationState = simulation.setup()
     var rendererState = renderer.setup()
     var inputState = input.setup()
-    var startTime = new Date()
-    var timeLastFrame = null
+    var startDate = new Date()
+    var lastFrameDate = startDate
+    var millisSinceStart = 0
+    var millisAccumulated = 0
+    TARGET_FRAME_TIME_MILLIS = 1000/60.0
+    TARGET_FRAME_TIME_SECONDS = 1/60.0
     TIME_SCALE = parseFloat(window.location.search.replace("?", "")) || 1
 
-    if (TIME_SCALE > 1.0)
-    {
-        for (var i = 0; i < route.length; ++i)
-            route[i].time += 10.0
-    }
+    window.setInterval(function() {
+        if (HIDDEN_SINCE != null)
+        {
+            lastFrameDate = new Date()
+            HIDDEN_SINCE = null
+        }
 
-    var interval = setInterval(function() {
-        var currentTime = new Date()
+        var currentDate = new Date()
+        var millisDelta = currentDate - lastFrameDate
+        lastFrameDate = currentDate
+        var scaledMillisDelta = millisDelta * TIME_SCALE
+        millisSinceStart += scaledMillisDelta
+        millisAccumulated += scaledMillisDelta
+        var simulationSteps = Math.floor(millisAccumulated / TARGET_FRAME_TIME_MILLIS)
 
-        var dt = timeLastFrame == null 
-            ? 1
-            : (currentTime - timeLastFrame)
+        var inputThisFrame = clone(inputState)
+        input.reset(inputState)
 
-        var timeSinceStart = (currentTime - startTime) / 1000.0
-        var timeLastFrame = currentTime
-        var time = timeSinceStart * TIME_SCALE
+        while (millisAccumulated >= TARGET_FRAME_TIME_MILLIS)
+        {
+            simulation.simulate(simulationState, inputThisFrame, millisSinceStart / 1000.0, TARGET_FRAME_TIME_SECONDS, TARGET_FRAME_TIME_SECONDS / TIME_SCALE)
+            millisAccumulated -= TARGET_FRAME_TIME_MILLIS
+            millisSinceStart += TARGET_FRAME_TIME_MILLIS
+        }
 
-        if (dt === 0)
-            dt = 1
-
-        dt = dt / 1000.0
-        var dtNonScaled = dt
-        dt *= TIME_SCALE
-
-            var inputThisFrame = clone(inputState)
-            input.reset(inputState)
-            simulation.simulate(simulationState, inputThisFrame, time, dt, dtNonScaled)
-            rendererState.sunPos = entity.worldPosition(simulationState.sun)
-            rendererState.playerPos = entity.worldPosition(simulationState.player)
-            renderer.createAddedObjects(rendererState, simulationState.addedObjects)
-            renderer.destroyRemovedObjects(rendererState, simulationState.removedObjects)
-            simulationState.addedObjects = []
-            simulationState.removedObjects = []
-            renderer.draw(rendererState, time, simulationState.camera.view)
-
-    }, 1000/30)
+        rendererState.sunPos = entity.worldPosition(simulationState.sun)
+        rendererState.playerPos = entity.worldPosition(simulationState.player)
+        renderer.createAddedObjects(rendererState, simulationState.addedObjects)
+        renderer.destroyRemovedObjects(rendererState, simulationState.removedObjects)
+        simulationState.addedObjects = []
+        simulationState.removedObjects = []
+        renderer.draw(rendererState, millisSinceStart / 1000.0, simulationState.camera.view)
+    }, TARGET_FRAME_TIME_MILLIS)
 }
 
 function clone(obj) {
@@ -298,7 +275,7 @@ var simulation = {
             if (obj.thrust)
             {
                 var rMat = mat4.fromQuat(mat4.create(), obj.rotation)
-                vec3.add(obj.velocity, obj.velocity, vec3.transformMat4(vec3.create(), [0, 1000 * dt, 0], rMat))
+                vec3.add(obj.velocity, obj.velocity, vec3.transformMat4(vec3.create(), [0, 2.4 * dt, 0], rMat))
 
                 function createParticle()
                 {
@@ -408,7 +385,7 @@ var simulation = {
         state.player.particleSpawnPoint = entity.spawn(state, null, 0)
         entity.translate(state.player.particleSpawnPoint, [0, -(rocketSize + rocketSize * 0.25), 0])
         entity.setParent(state.player.particleSpawnPoint, state.player)
-        state.player.mass = 20000
+        state.player.mass = 2000
         state.player.started = false
         state.player.color = [0, 1, 1]
         state.player.shader = "ship"
@@ -427,8 +404,8 @@ var simulation = {
         state.camera = entity.spawn(state, null, 0, function(obj, dt, t, input, dtNonScaled) {
             if (input.leftDown)
             {
-                entity.rotateY(obj, -input.mouseDeltaX * dtNonScaled * 3)
-                entity.rotateX(obj, -input.mouseDeltaY * dtNonScaled * 3)
+                entity.rotateY(obj, -input.mouseDeltaX * dtNonScaled)
+                entity.rotateX(obj, -input.mouseDeltaY * dtNonScaled)
             }
             
             if (input.rightDown)
@@ -448,6 +425,7 @@ var simulation = {
         return state
     },
 
+    // This is called once every 16.7 ms
     simulate: function(state, input, t, dt, dtNonScaled)
     {
         for (var i = 0; i < state.world.length; ++i)
@@ -465,7 +443,7 @@ var simulation = {
                     var v = vec3.subtract(vec3.create(), entity.worldPosition(parent), entity.worldPosition(obj))
                     var n = vec3.normalize(vec3.create(), v)
                     var d = vec3.length(v)
-                    var G = 6.6726*Math.pow(10, -4)
+                    var G = 6.6726*Math.pow(10, -5)
                     var fDivM = (G * parent.mass * obj.mass) / (d*d)
                     var fv = vec3.scale(vec3.create(), n, fDivM * dt)
                     obj.velocity = vec3.add(vec3.create(), obj.velocity, fv)
