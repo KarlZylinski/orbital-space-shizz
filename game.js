@@ -5,8 +5,7 @@ TIME_SCALE = 1
 
 var route = [
     {
-//        time: 2,
-        time: 0,
+        time: 2,
         action: "thrust"
     },
     {
@@ -40,31 +39,23 @@ window.onload = function()
     var startDate = new Date()
     var lastFrameDate = startDate
     var millisSinceStart = 0
-    var millisAccumulated = 0
     FRAME_TIME_MILLIS = 1000/60.0
     PHYSICS_FRAME_TIME_MILLIS = 1000/60.0
     PHYSICS_FRAME_TIME_SECONDS = PHYSICS_FRAME_TIME_MILLIS/1000.0
-    TIME_SCALE = parseFloat(window.location.search.replace("?", "")) || 1
+    FRAME_MULTIPLIER = Math.floor(parseFloat(window.location.search.replace("?", "")) || 1)
 
     window.setInterval(function() {
         var currentDate = new Date()
         var millisDelta = currentDate - lastFrameDate
         lastFrameDate = currentDate
-        var scaledMillisDelta = millisDelta * TIME_SCALE
-        millisSinceStart += scaledMillisDelta
-        millisAccumulated += scaledMillisDelta
         var inputThisFrame = clone(inputState)
         input.reset(inputState)
 
-        var i = 0
-        while (millisAccumulated >= PHYSICS_FRAME_TIME_MILLIS)
+        for (var frame = 0; frame < FRAME_MULTIPLIER; ++frame)
         {
-            ++i
-            simulation.simulate(simulationState, inputThisFrame, millisSinceStart / 1000.0, PHYSICS_FRAME_TIME_SECONDS, PHYSICS_FRAME_TIME_SECONDS / TIME_SCALE)
-            millisAccumulated -= PHYSICS_FRAME_TIME_MILLIS
+            simulation.simulate(simulationState, inputThisFrame, millisSinceStart / 1000.0, PHYSICS_FRAME_TIME_SECONDS, PHYSICS_FRAME_TIME_SECONDS / FRAME_MULTIPLIER)
             millisSinceStart += PHYSICS_FRAME_TIME_MILLIS
         }
-        console.log(i)
 
         for (var i = 0; i < simulationState.world.length; ++i)
         {
@@ -201,8 +192,8 @@ var simulation = {
         state.removedObjects = []
 
         var origin = entity.spawn(state, null, 0, function(obj, dt, t) {
-            entity.rotateY(obj, dt*0.01)
-            entity.rotateZ(obj, dt*0.01)
+            entity.rotateY(obj, dt*0.0001)
+            entity.rotateZ(obj, dt*0.0001)
         })
 
         var sunSize = 15000
@@ -217,19 +208,20 @@ var simulation = {
         entity.setParent(sunHalo, sunEnt)
         sunHalo.shader = "halo"
 
-        var planet = state.planet = entity.spawn(state, "sphere", planetSize)
+        var planet = state.planet = entity.spawn(state, "sphere", planetSize, function(obj, dt) {
+        })
         planet.shader = "planet"
         planet.color = [0.3, 0.8, 0.2]
         planet.mass = 100000000
         entity.rotateY(planet, 2)
 
         var moon = state.moon = entity.spawn(state, "sphere", planetSize / 2, function(obj, dt, t) {
-            entity.rotateY(obj, dt*0.1)
+            entity.rotateY(obj, dt*0.001)
         })
 
         moon.orbitParent = planet
-        moon.velocity = [70.71, 0, -70.71]
-        moon.mass = 1000
+        moon.velocity = [60.71, 0, -60.71]
+        moon.mass = 10000
         entity.translate(moon, vec3.add(vec3.create(), entity.worldPosition(planet), [-planetSize*2.7, 0, -planetSize*2.7]))
 
         function getCoords(latNumber, longNumber)
@@ -255,7 +247,7 @@ var simulation = {
         var rocketSize = 0.5
         state.particleSystem.particleSize = rocketSize*0.25
         state.player = entity.spawn(state, "rocket", rocketSize, function(obj, dt, t, input) {
-            if (obj.started == false)//(input.pressedKeys["space"] || IS_IOS) && obj.started == false)
+            if ((input.pressedKeys["space"] || IS_IOS) && obj.started == false)
             {
                 obj.started = true
                 obj.thrust = false
@@ -266,7 +258,6 @@ var simulation = {
                 obj.orbitParent = planet
                 obj.thrusterParticles = []
                 obj.lastThrusterParticleCreationTime = 0
-                entity.calculateModel(obj)
             }
 
             if (obj.started && t > obj.startTime + 1)
@@ -390,12 +381,12 @@ var simulation = {
         state.player.shader = "ship"
 
         var planetNormPos = getCoords(0, 0)
-        var offset = vec3.scale(vec3.create(), planetNormPos, planetSize + 2.7)
-        entity.translate(base, vec3.subtract(vec3.create(), offset, [0, 55, 0]))
+        var offset = vec3.scale(vec3.create(), planetNormPos, planetSize + 0.7)
+        entity.translate(base, vec3.subtract(vec3.create(), offset, [0, 0.99, 0]))
 
-        var sky = entity.spawn(state, "box", 190000, function(obj) {
-            obj.position = entity.worldPosition(state.player)
-            entity.calculateModel(obj)
+        var skyBoxSize = 190000
+        var sky = entity.spawn(state, "box", skyBoxSize, function(obj) {
+            entity.setPosition(obj, entity.worldPosition(state.player))
         })
 
         sky.shader = "sky"
@@ -408,7 +399,12 @@ var simulation = {
             }
             
             if (input.rightDown)
-                obj.distance += input.mouseDeltaY/50.0
+            {
+                obj.distance += input.mouseDeltaY * dtNonScaled * 3 * (obj.distance / 10)
+
+                if (obj.distance > skyBoxSize / 2)
+                    obj.distance = skyBoxSize / 2
+            }
 
             if (obj.distance < 1.2)
                 obj.distance = 1.2
@@ -474,7 +470,7 @@ var entity = {
             shader: "planet",
             update: update,
             sharedGeometry: false,
-            dirty: false,
+            dirty: true,
             alive: true
         }
 
@@ -486,7 +482,6 @@ var entity = {
 
         simulationState.world.push(e)
         simulationState.addedObjects.push(e)
-        entity.calculateModel(e)
         return e
     },
 
@@ -524,6 +519,9 @@ var entity = {
 
     calculateModel: function(e)
     {
+        if (!e.dirty)
+            return
+
         mat4.identity(e.model)
         var model = e.model
 
@@ -546,9 +544,7 @@ var entity = {
         if (e.dirty)
             calculate(e)
 
-        for (var i = 0; i < e.children.length; ++i) {
-            entity.calculateModel(e.children[i])
-        }
+        e.dirty = false
     },
 
     worldPosition: function(e)
@@ -568,7 +564,10 @@ var entity = {
     markDirty: function(e)
     {
         for (var i = 0; i < e.children.length; ++i)
-            entity.markDirty(e.children[i])
+        {
+            if (!e.children[i].dirty)
+                entity.markDirty(e.children[i])
+        }
 
         e.dirty = true
     },
@@ -619,9 +618,21 @@ var entity = {
 
     setParent: function(e, parent)
     {
+        entity.markDirty(e)
+
+        if (e.parent != null)
+        {
+            var currentPos = entity.worldPosition(e)
+            e.parent.children.splice(findIndex(e.parent.children, function(x) { x.id == e.id }), 1)
+            e.parent = null
+            entity.setPosition(currentPos)
+        }
+
+        if (parent == null)
+            return
+
         parent.children.push(e)
         e.parent = parent
-        entity.markDirty(e)
     }
 }
 
@@ -1220,3 +1231,26 @@ function initWebGLEW(gl) {
     webGlewStruct.set(gl, extensions)
     return extensions
 }
+
+function find(arr, comparer)
+{
+    var i = findIndex(arr, comparer)
+
+    if (i == -1)
+        return null
+
+    return arr[i]
+}
+
+
+function findIndex(arr, comparer)
+{
+    for (var i = 0; i < arr.length; ++i)
+    {
+        if (comparer(arr[i]))
+            return i
+    }
+
+    return -1
+}
+
