@@ -1,13 +1,16 @@
 // Space Orbital Shizz by Karl Zylinski. Music by Karl Flodin.
 
 GEOMETRY_SIZE = 9
-TIME_SCALE = 1
+FRAME_MULTIPLIER = 1
+HALTED = false
 
 var route = [
+    // START!
     {
         time: 2,
         action: "thrust"
     },
+    // We're airborne, rotate slightly.
     {
         time: 50,
         action: "rotate",
@@ -15,13 +18,35 @@ var route = [
         radsPerSec: 0.5
     },
     {
-        time: 51,
+        time: 53,
+        action: "stopRotate",
+    },
+    // Enough thrust to get to orbit, cut engine
+    {
+        time: 85,
+        action: "cut"
+    },
+
+    // The periapsis is very close to the planet, adjust by turning in direction of velocity at
+    // apoapsis and making a short engine burn. This will make the orbit more circular, distancing the periapsis.
+    {
+        time: 310,
+        action: "rotate",
+        axis: "z",
+        radsPerSec: 0.2
+    },
+    {
+        time: 325,
         action: "stopRotate",
     },
     {
-        time: 500,
+        time: 325,
+        action: "thrust"
+    },
+    {
+        time: 330,
         action: "cut"
-    }
+    },
 ]
 
 IS_IOS = (navigator.userAgent.match(/(iPad|iPhone|iPod)/g) ? true : false);
@@ -40,20 +65,23 @@ window.onload = function()
     var lastFrameDate = startDate
     var millisSinceStart = 0
     FRAME_TIME_MILLIS = 1000/60.0
-    PHYSICS_FRAME_TIME_MILLIS = 1000/60.0
+    PHYSICS_FRAME_TIME_MILLIS = 1000/45.0
     PHYSICS_FRAME_TIME_SECONDS = PHYSICS_FRAME_TIME_MILLIS/1000.0
     FRAME_MULTIPLIER = Math.floor(parseFloat(window.location.search.replace("?", "")) || 1)
 
     window.setInterval(function() {
+        if (HALTED)
+            return
+
         var currentDate = new Date()
         var millisDelta = currentDate - lastFrameDate
         lastFrameDate = currentDate
-        var inputThisFrame = clone(inputState)
-        input.reset(inputState)
 
         for (var frame = 0; frame < FRAME_MULTIPLIER; ++frame)
         {
-            simulation.simulate(simulationState, inputThisFrame, millisSinceStart / 1000.0, PHYSICS_FRAME_TIME_SECONDS, PHYSICS_FRAME_TIME_SECONDS / FRAME_MULTIPLIER)
+            var inputThisFrame = clone(inputState)
+            input.reset(inputState)
+            simulation.simulate(simulationState, inputThisFrame, millisSinceStart / 1000.0, PHYSICS_FRAME_TIME_SECONDS, PHYSICS_FRAME_TIME_SECONDS)
             millisSinceStart += PHYSICS_FRAME_TIME_MILLIS
         }
 
@@ -153,6 +181,12 @@ var input = {
                 state.keysHeld["up"] = true
                 state.pressedKeys["up"] = true
             }
+
+            if (e.keyCode == 40)
+            {
+                state.keysHeld["down"] = true
+                state.pressedKeys["down"] = true
+            }
         });
 
         document.addEventListener('keyup', function(e) {
@@ -166,6 +200,12 @@ var input = {
             {
                 state.keysHeld["up"] = false
                 state.pressedKeys["up"] = false
+            }
+
+            if (e.keyCode == 40)
+            {
+                state.keysHeld["down"] = false
+                state.pressedKeys["down"] = false
             }
         });
 
@@ -220,9 +260,9 @@ var simulation = {
         })
 
         moon.orbitParent = planet
-        moon.velocity = [60.71, 0, -60.71]
+        moon.velocity = [45.71, 0, -45.71]
         moon.mass = 10000
-        entity.translate(moon, vec3.add(vec3.create(), entity.worldPosition(planet), [-planetSize*2.7, 0, -planetSize*2.7]))
+        entity.translate(moon, vec3.add(vec3.create(), entity.worldPosition(planet), [-planetSize*6, 0, -planetSize*6]))
 
         function getCoords(latNumber, longNumber)
         {
@@ -265,7 +305,7 @@ var simulation = {
                 var playerPosLen = vec3.length(obj.position)
 
                 if (playerPosLen <= (planetSize))
-                    TIME_SCALE = 0
+                    HALTED = true
             }
 
             if (obj.thrust)
@@ -388,6 +428,7 @@ var simulation = {
         var sky = entity.spawn(state, "box", skyBoxSize, function(obj) {
             entity.setPosition(obj, entity.worldPosition(state.player))
         })
+        entity.rotateY(sky, Math.PI / 1.4)
 
         sky.shader = "sky"
 
@@ -419,10 +460,25 @@ var simulation = {
         state.camera.distance = 3
         return state
     },
-
-    // This is called once every 16.7 ms
+    
     simulate: function(state, input, t, dt, dtNonScaled)
     {
+        if (input.pressedKeys["up"])
+        {
+            FRAME_MULTIPLIER *= 2
+
+            if (FRAME_MULTIPLIER > 1000)
+                FRAME_MULTIPLIER = 1000
+        }
+
+        if (input.pressedKeys["down"])
+        {
+            FRAME_MULTIPLIER /= 2
+
+            if (FRAME_MULTIPLIER < 1)
+                FRAME_MULTIPLIER = 1
+        }
+
         for (var i = 0; i < state.world.length; ++i)
         {
             var obj = state.world[i]
@@ -441,7 +497,7 @@ var simulation = {
                     var G = 6.6726*Math.pow(10, -5)
                     var fDivM = (G * parent.mass * obj.mass) / (d*d)
                     var fv = vec3.scale(vec3.create(), n, fDivM * dt)
-                    obj.velocity = vec3.add(vec3.create(), obj.velocity, fv)
+                    vec3.add(obj.velocity, obj.velocity, fv)
                 }
 
                 entity.translate(obj, vec3.scale(vec3.create(), obj.velocity, dt))
